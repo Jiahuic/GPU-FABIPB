@@ -150,6 +150,42 @@ void sphereTest(ssystem *sys) {
 
 }/* sphereTest */
 
+void checkSoln(ssystem *sys, double *sgm){
+  int i;
+  int nPnls = sys->nPnls;
+  double fac, grad[3], u0, dudn, locErr, dist, l8Err=0.0, l2Err=0.0;
+  panel *pnl;
+
+  for ( i=0, pnl=sys->pnlLst; pnl!=NULL; pnl=pnl->nextC, i++ ) {
+    dist = sqrt(SQR(pnl->x[0])+SQR(pnl->x[1])+SQR(pnl->x[2]));
+    if ( dist - Ra > 1.0e-10 ) {
+      u0 = fourPiI*exp(kappa*(Ra-dist))/epsilon/(1.0+kappa*Ra)
+          /dist*sys->chr[0];
+    } else {
+      u0 = fourPiI*(1.0/epsilon/(1.0+kappa*Ra)/Ra
+          -1.0/Ra + 1.0/dist)*sys->chr[0];
+    }
+    locErr = fabs(u0-sgm[i]);
+    if ( locErr > l8Err ) l8Err = locErr;
+    l2Err += locErr*locErr*pnl->area;
+  }
+  printf("l2-err=%lg  l8-err=%lg\n", sqrt(l2Err), l8Err);
+
+  for ( i=0, pnl=sys->pnlLst; pnl!=NULL; pnl=pnl->nextC, i++ ) {
+    dist = sqrt(SQR(pnl->x[0])+SQR(pnl->x[1])+SQR(pnl->x[2]));
+    if ( dist - Ra > 1.0e-10 ) {
+      u0 = -fourPiI/dist/dist/epsilon*sys->chr[0];
+    } else {
+      u0 = -fourPiI/dist/dist*sys->chr[0];
+    }
+    locErr = fabs(u0-sgm[i+nPnls]);
+    if ( locErr > l8Err ) l8Err = locErr;
+    l2Err += locErr*locErr*pnl->area;
+  }
+  printf("l2-err=%lg  l8-err=%lg\n", sqrt(l2Err), l8Err);
+} /* checkSoln */
+
+
 int main(int nargs, char *argv[]){
   char panelfile[80], density[80];
   int order=-1, image=0, refineLev=0, numSurfOne=1;
@@ -257,10 +293,10 @@ int main(int nargs, char *argv[]){
   CALLOC(sgm, 2*nPnls, double, ON, AMISC);
   CALLOC(pot, 2*nPnls, double, ON, AMISC);
 
-  //setupFMM(sys);
+  setupFMM(sys);
   //sphereTest(sys);
   setupRHS(sys, sgm);
-  setupFMM(sys);
+  //setupFMM(sys);
 
   //setupDirect(sys);
   //exit(0);
@@ -269,21 +305,12 @@ int main(int nargs, char *argv[]){
   for ( i=0; i<2*nPnls; i++ ) pot[i] = sgm[i];
 
   /*
-  //for ( i=0; i<nPnls; i++ ) {
-    //sgm[i] = 1.0;
-    //sgm[i+nPnls] = 1.0;
-  //}
-
   applyFMM(sys, sgm, pot);
   for (  i=0, pnl=sys->pnlLst; pnl!=NULL; pnl=pnl->nextC, i++ ) {
     pot[i] = (1.0+epsilon)/2.0*pnl->area*sgm[i]-pot[i];
     pot[i+nPnls] = (1.0+1.0/epsilon)/2.0*pnl->area*sgm[i+nPnls]-pot[i+nPnls];
   }
 
-  for ( i=0; i<nPnls; i++ ) {
-    sgm[i] = 1.0;
-    sgm[i+nPnls] = 1.0;
-  }
   setupRHS(sys, sgm);
 
   double *pot1;
@@ -292,24 +319,41 @@ int main(int nargs, char *argv[]){
 
   abserr=0.0; relerr=0.0; relinf_err=0.0; absinf_err=0.0;
   for ( i=0; i<nPnls; i++ ) {
-    //printf("%.15f %.15f\n",sgm[i],sgm[i+nPnls]);
     temp1 = fabs(pot1[i]-pot[i]);
-    relerr += temp1*temp1;
-    abserr += pot[i]*pot[i];
+    temp2 = temp1/fabs(pot1[i]);
+    relerr1 += temp1*temp1; //e3
+    //abserr1 += realsol1*realsol1;
     if ( temp1 > relinf_err ) relinf_err = temp1;
-    temp1 = fabs(pot1[i]);
-    if ( temp1 > absinf_err ) absinf_err = temp1;
+    if ( temp2 > absinf_err ) absinf_err = temp2;
+    //printf("%.15f %.15f\n",sgm[i],sgm[i+nPnls]);
 
-    temp1 = fabs(pot1[i+nPnls]-pot[i+nPnls]);
-    relerr += temp1*temp1;
-    abserr += pot[i+nPnls]*pot[i+nPnls];
-    if ( temp1 > relinf_err ) relinf_err = temp1;
-    temp1 = fabs(pot1[i+nPnls]);
-    if ( temp1 > absinf_err ) absinf_err = temp1;
+    //temp1 = fabs(pot1[i+nPnls]-pot[i+nPnls]);
+    //relerr += temp1*temp1;
+    //abserr += pot[i+nPnls]*pot[i+nPnls];
+    //if ( temp1 > relinf_err ) relinf_err = temp1;
+    //temp1 = fabs(pot1[i+nPnls]);
+    //if ( temp1 > absinf_err ) absinf_err = temp1;
   }
-  relerr = sqrt(relerr/abserr);
-  relinf_err =  relinf_err/absinf_err;
-  printf("the Relative L2 and Inf norm: %.16f %.16f\n",relerr,relinf_err);
+  printf("the Relative rel Inf norm: %.16f %.16f\n",absinf_err,relinf_err);
+  abserr=0.0; relerr=0.0; relinf_err=0.0; absinf_err=0.0;
+  for ( i=nPnls; i<2*nPnls; i++ ) {
+    temp1 = fabs(pot1[i]-pot[i]);
+    temp2 = temp1/fabs(pot1[i]);
+    relerr1 += temp1*temp1; //e3
+    //abserr1 += realsol1*realsol1;
+    if ( temp1 > relinf_err ) relinf_err = temp1;
+    if ( temp2 > absinf_err ) absinf_err = temp2;
+    //printf("%.15f %.15f\n",sgm[i],sgm[i+nPnls]);
+
+    //temp1 = fabs(pot1[i+nPnls]-pot[i+nPnls]);
+    //relerr += temp1*temp1;
+    //abserr += pot[i+nPnls]*pot[i+nPnls];
+    //if ( temp1 > relinf_err ) relinf_err = temp1;
+    //temp1 = fabs(pot1[i+nPnls]);
+    //if ( temp1 > absinf_err ) absinf_err = temp1;
+  }
+
+  printf("the Relative rel Inf norm: %.16f %.16f\n",absinf_err,relinf_err);
   exit(0);
   */
 
@@ -333,13 +377,19 @@ int main(int nargs, char *argv[]){
   //for ( i=0; i<80; i++ ) printf("%f\n",sgm[i]);
   printf("pot: %f\n",potential);
 
+  checkSoln(sys, sgm);
+
+  /*
   abserr1=0.0; relerr1=0.0; relinf_err1=0.0; absinf_err1=0.0;
   abserr2=0.0; relerr2=0.0; relinf_err2=0.0; absinf_err2=0.0;
-  sphereTest(sys);
+  double relasol1, relasol2;
+  double srelerr1, srelinf_err1, sabsinf_err1;
+  double srelerr2, srelinf_err2, sabsinf_err2;
+  //sphereTest(sys);
   for ( i=0, pnl=sys->pnlLst; pnl!=NULL; pnl=pnl->nextC, i++ ) {
     //printf("%.15f %.15f\n",sgm[i],sgm[i+nPnls]);
     dist = sqrt(SQR(pnl->x[0])+SQR(pnl->x[1])+SQR(pnl->x[2]));
-    //dist = 50.0;
+    //dist = Ra;
     //printf("%.15f\n",dist);
     if ( dist - Ra > 1.0e-10 ) {
       realsol1 = fourPiI*exp(kappa*(Ra-dist))/epsilon/(1.0+kappa*Ra)
@@ -351,6 +401,20 @@ int main(int nargs, char *argv[]){
                - 1.0/Ra + 1.0/dist)*sys->chr[0];
       realsol2 = -fourPiI/dist/dist*sys->chr[0];
     }
+
+    dist = Ra;
+    if ( dist - Ra > 1.0e-10 ) {
+      relasol1 = fourPiI*exp(kappa*(Ra-dist))/epsilon/(1.0+kappa*Ra)
+                /dist*sys->chr[0];
+      relasol2 = -fourPiI/dist/dist/epsilon*sys->chr[0];
+      //printf("%f %f\n",realsol1,realsol2);
+    } else {
+      relasol1 = fourPiI*(1.0/epsilon/(1.0+kappa*Ra)/Ra
+               - 1.0/Ra + 1.0/dist)*sys->chr[0];
+      relasol2 = -fourPiI/dist/dist*sys->chr[0];
+    }
+    */
+
     //printf("%.16f %.16f %.16f\n",dist,realsol1,realsol2);
     /*//relative error
     temp1 = fabs(realsol1-sgm[i]);
@@ -369,6 +433,22 @@ int main(int nargs, char *argv[]){
 
     //printf("%.15f %.15f %.15f\n",dist,realsol1,realsol2);
     */
+
+    /*
+    temp1 = fabs(realsol1-relasol1);
+    temp2 = temp1/fabs(relasol1);
+    srelerr1 += temp1*temp1; //e3
+    //abserr1 += realsol1*realsol1;
+    if ( temp1 > srelinf_err1 ) srelinf_err1 = temp1;
+    if ( temp2 > sabsinf_err1 ) sabsinf_err1 = temp2;
+    //printf("%.16f %.16f\n",relinf_err1,absinf_err1);
+
+    temp1 = fabs(realsol2-relasol2);
+    temp2 = temp1/fabs(relasol2);
+    srelerr2 += temp1*temp1;
+    if ( temp1 > srelinf_err2 ) srelinf_err2 = temp1;
+    if ( temp2 > sabsinf_err2 ) sabsinf_err2 = temp1;
+
     temp1 = fabs(realsol1-sgm[i]);
     temp2 = temp1/fabs(realsol1);
     relerr1 += temp1*temp1; //e3
@@ -386,8 +466,9 @@ int main(int nargs, char *argv[]){
     sgm[i] = realsol1;
     sgm[i+nPnls] = realsol2;
   }
-  printf("Error linf:%e %e l2:%e\n",relinf_err1,absinf_err1,sqrt(relerr1/nPnls));
-  printf("Error: %e %e %e\n",relinf_err2,absinf_err2,sqrt(relerr2/nPnls));
+  printf("Error linf:%e l2:%e l1:%e\n",relinf_err1,absinf_err1,sqrt(relerr1/nPnls));
+  printf("Error linf:%e l2:%e l1:%e\n",relinf_err2,absinf_err2,sqrt(relerr2/nPnls));
+  */
   /*
   relerr1 = sqrt(relerr1/abserr1);
   relinf_err1 =  relinf_err1/absinf_err1;
@@ -397,6 +478,7 @@ int main(int nargs, char *argv[]){
   printf("the Relative L2 and Inf norm: %f %f\n",relerr2,relinf_err2);
   */
 
+  /*
   potential = 0.0, para=332.0716;
   for ( i=0; i<sys->nChar; i++ ) {
     potential_molecule( sys, &sys->pos[3*i], sgm, &ptl );
@@ -404,7 +486,9 @@ int main(int nargs, char *argv[]){
   }
   //for ( i=0; i<80; i++ ) printf("%f\n",sgm[i]);
   printf("pot: %f\n",potential);
-
+  printf("Error linf:%e l2:%e l1:%e\n",srelinf_err1,sabsinf_err1,sqrt(srelerr1/nPnls));
+  printf("Error linf:%e l2:%e l1:%e\n",srelinf_err2,sabsinf_err2,sqrt(srelerr2/nPnls));
+  */
 
 }
 
@@ -460,17 +544,17 @@ void MtV(ssystem *sys, double *sgm, double *pot) {
   applyFMM(sys, sgm, pot);
   //applyDirect(sys, sgm, pot);
   //output = 0.0;
-//  for ( i=0;i<20;i++ ) {
-//    output += pot[i];
-//    printf("%f %f\n",sgm[i],pot[i]);
-//  }
+  //for ( i=0;i<20;i++ ) {
+  //  output += pot[i];
+  //  printf("%f %f\n",sgm[i],pot[i]);
+  //}
   for (  i=0, pnl=sys->pnlLst; pnl!=NULL; pnl=pnl->nextC, i++ ) {
     pot[i] = (1.0+epsilon)/2.0*pnl->area*sgm[i]-pot[i];
     pot[i+nPnls] = (1.0+1.0/epsilon)/2.0*pnl->area*sgm[i+nPnls]-pot[i+nPnls];
     //pot[i] = (1.0+epsilon)/2.0*sgm[i]-pot[i];
     //pot[i+nPnls] = (1.0+1.0/epsilon)/2.0*sgm[i+nPnls]-pot[i+nPnls];
   }
-//  printf("\n%f",output);
+  //printf("\n%f",output);
   //exit(0);
 } /* MtV */
 
