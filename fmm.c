@@ -4,6 +4,9 @@
  *
  *    for piecewise constant elements
  *
+ *  Author: Johannes Tausch
+ *  Modified by J. Chen
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,7 +89,6 @@ void setupNearfield0( ssystem *sys ) {
       for ( ii=j=0, pnlY=cb1->pnls; j<nPnl1; j++, pnlY=pnlY->nextC ) {
         for ( i=0, pnlX=cb->pnls; i<nPnl; i++, pnlX=pnlX->nextC, ii++ ) {
           KER = panelIA0(pnlX, pnlY);
-//          printf("%d %d %d %d\n",ii,pnlX->nSurf,pnlY->nSurf,pnlY->idx);
 
           KER1[ii] = KER[0];
           KER2[ii] = KER[1];
@@ -364,11 +366,5 @@ void applyFMM(ssystem *sys, double *sgm, double *pot) {
   }
 
   applyNearfield0(sys, sgm, pot);
-  //for ( i=0; i<nPnls; i++ ) {
-    //printf("%f %f\n",sgm[i],pot[i]);
-    //pot[i] = 0.0;
-    //pot[i+nPnls] = 0.0;
-  //}
-  //exit(0);
 
 } /* applyFMM */

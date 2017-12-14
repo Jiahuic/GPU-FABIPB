@@ -9,6 +9,7 @@
  *
  *
  *  Written by Johannes Tausch
+ *  Modified by J. Chen
  */
 #include <stdio.h>
 #include <stdlib.h>
