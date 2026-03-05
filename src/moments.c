@@ -35,14 +35,14 @@ void initCalcMoments(ssystem *sys) {
 
 
 
-  CALLOC(MomWrk, nMomL, double, ON, AMISC);
-  CALLOC(MomLoc, nMomL, double, ON, AMISC);
-  CALLOC(convVec1, nMomL, double, ON, AMISC);
-  CALLOC(convVec2, nMomL, double, ON, AMISC);
-  CALLOC(convVec3, nMomL, double, ON, AMISC);
-  CALLOC(fcnBuf1, order+1, double, ON, AMISC);
-  CALLOC(fcnBuf2, order+1, double, ON, AMISC);
-  CALLOC(fcnBuf3, order+1, double, ON, AMISC);
+  CALLOC(MomWrk, nMomL, double);
+  CALLOC(MomLoc, nMomL, double);
+  CALLOC(convVec1, nMomL, double);
+  CALLOC(convVec2, nMomL, double);
+  CALLOC(convVec3, nMomL, double);
+  CALLOC(fcnBuf1, order+1, double);
+  CALLOC(fcnBuf2, order+1, double);
+  CALLOC(fcnBuf3, order+1, double);
 
 } /* initCalcMoments */
 
@@ -67,8 +67,7 @@ void convolution(int order, double *a, double *b, double *c){
             j2 = i2 - k2;
             for ( k3=0; k3<=i3; k3++ ) {
               j3 = i3 - k3;
-              tmp += fact3[idx3[i1][i2][i3]]*a[idx3[j1][j2][j3]]*b[idx3[k1][k2][k3]];
-              //tmp += a[idx3[j1][j2][j3]]*b[idx3[k1][k2][k3]];
+              tmp += a[idx3[j1][j2][j3]]*b[idx3[k1][k2][k3]];
             }
           }
         }
@@ -77,43 +76,6 @@ void convolution(int order, double *a, double *b, double *c){
     }
   }
 } /* convolution */
-
-/*
- * computes the convolution
- *   c_\alpha = \sum_{\beta+\gamma = \alfa} (binomial coef)*a_\beta * b_\gamma
- *                      a_1!           a_2!          a_3!
- * (binomial coef)=--------------*--------------*--------------
- *                 b_1!(a_1-b_1)! b_2!(a_2-b_2)! b_3!(a_3-b_3)!
- * Here, beta is with coef before get in
- * for \abs{\alpha} <= order
- * This routine does the same as convolution() in moments.c, with
- * the only difference that convM2M is additive.
- */
-void convM2M1(int order, double *a, double *b, double *c){
-  int i, j, i1, i2, i3, j1, j2, j3, k1, k2, k3, n, m;
-  double tmp, tmp1, tmp2;
-
-  for ( i=n=0; n<=order; n++ ) {
-    for ( i1=0; i1<=n; i1++ ) {
-      for ( i2=0; i2<=n-i1; i2++, i++ ) {
-        i3=n-i1-i2;
-        for ( tmp1=0.0,tmp2=0.0,k1=0; k1<=i1; k1++ ) {
-          j1 = i1 - k1;
-          for ( k2=0; k2<=i2; k2++ ) {
-            j2 = i2 - k2;
-            for ( k3=0; k3<=i3; k3++ ) {
-              j3 = i3 - k3;
-              tmp = fact3[idx3[i1][i2][i3]]*a[idx3[j1][j2][j3]]*ifact3[idx3[k1][k2][k3]];
-              //tmp = a[idx3[j1][j2][j3]]*ifact3[idx3[k1][k2][k3]];
-              tmp1 += tmp*b[idx3[k1][k2][k3]];
-            }
-          }
-        }
-        c[i] += tmp1;
-      }
-    }
-  }
-} /* convM2M */
 
 /*
  * setup the M2M translation vector.
@@ -161,9 +123,9 @@ void calcOneNoment(ssystem *sys, int order, panel *pnl, double *Mom, double *Nom
     for ( i1=0; i1<=n; i1++ ) {
       for ( i2=0; i2<=n-i1; i2++, i++ ) {
         i3=n-i1-i2;
-        Nom[idx3[i1+1][i2][i3]] += (i1+1)*nrm[0]*Mom[i];
-        Nom[idx3[i1][i2+1][i3]] += (i2+1)*nrm[1]*Mom[i];
-        Nom[idx3[i1][i2][i3+1]] += (i3+1)*nrm[2]*Mom[i];
+        Nom[idx3[i1+1][i2][i3]] += nrm[0]*Mom[i];
+        Nom[idx3[i1][i2+1][i3]] += nrm[1]*Mom[i];
+        Nom[idx3[i1][i2][i3+1]] += nrm[2]*Mom[i];
       }
     }
   }
@@ -259,7 +221,7 @@ double *calcMoments0(ssystem *sys, int order, cube *cb, int job) {
   panel *pnl;
 
   ldM = nMom;
-  CALLOC(Moments, ldM*nPnls, double, ON, AQ2M);
+  CALLOC(Moments, ldM*nPnls, double);
 
   for (idx=0, pnl=cb->pnls; idx<nPnls; pnl=pnl->nextC, idx++ ) {
     v0 = pnl->vtx[0];
@@ -267,8 +229,7 @@ double *calcMoments0(ssystem *sys, int order, cube *cb, int job) {
     /* translate to center of cube */
     trns[0] = v0[0]-ctr[0]; trns[1] = v0[1]-ctr[1]; trns[2] = v0[2]-ctr[2];
     setupConVect(order, trns, convVec1);
-    //convolution(order, convVec1, MomLoc, &Moments[idx*ldM]);
-    convM2M1(order, convVec1, MomLoc, &Moments[idx*ldM]);
+    convolution(order, convVec1, MomLoc, &Moments[idx*ldM]);
   }
 
   return Moments;

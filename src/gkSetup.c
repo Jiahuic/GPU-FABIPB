@@ -11,7 +11,7 @@
 #include "gkGlobal.h"
 #include "gk.h"
 
-extern int doEllipsoid;
+extern int doSphere;
 extern void **sortBuf1, **sortBuf2, **LList;
 #define EPS 1e-12
 
@@ -43,8 +43,8 @@ void getOrders( ssystem *sys, int order, int orderMom ) {
   int depth=sys->depth, height=sys->height;
   int lev, k, cnt;
 
-  CALLOC(sys->ordMom, depth+1, int, ON, AMISC);
-  CALLOC(sys->ordM2L, depth+1, int, ON, AMISC);
+  CALLOC(sys->ordMom, depth+1, int);
+  CALLOC(sys->ordM2L, depth+1, int);
 
   if ( order > 0 ) { /* fixed order */
     for ( lev=0; lev<=depth; lev++ ) {
@@ -73,7 +73,7 @@ void getOrders( ssystem *sys, int order, int orderMom ) {
 
 
   /* determine the number of moments as a function of the order */
-  CALLOC(sys->nMom, sys->maxOrder+3, int, ON, AMISC);
+  CALLOC(sys->nMom, sys->maxOrder+3, int);
   for ( cnt=0; cnt<=sys->maxOrder+2; cnt++ ) {
     sys->nMom[cnt] = ((cnt+1)*(cnt+2)*(cnt+3))/6;
   }
@@ -114,7 +114,7 @@ int loopPanels(ssystem *sys, panel *panels) {
     nPnls++;
   }
 
-  CALLOC(sideLen, maxLev+1, double, ON, AMISC);
+  CALLOC(sideLen, maxLev+1, double);
 
   length = MAX((maxx - minx), (maxy - miny));
   length = MAX((maxz - minz), length);
@@ -150,7 +150,7 @@ cube* goDown( double* refPt, cube* cb ) {
   idx = ix + 2*iy + 4*iz;
 
   if ( cb->kids[idx] == NULL ) {
-    CALLOC(cb->kids[idx], 1, cube, ON, ACUBES);
+    CALLOC(cb->kids[idx], 1, cube);
     kid = cb->kids[idx];
     kid->level = cb->level+1;
     kid->i = 2*cb->i + ix;
@@ -227,7 +227,11 @@ void linkcubes(cube *cb) {
 
     for ( i2=0; i2<cb->nKids; i2++ ) {
       linkcubes(cb->kids[i2]);
+      cb->nPnls += cb->kids[i2]->nPnls;
     }
+    /* let parents link their children's pnl */
+    if ( cb->pnls == NULL )
+      cb->pnls = cb->kids[0]->pnls;
   }
 } /* linkcubes */
 
@@ -278,8 +282,10 @@ void getEnclBoxs(ssystem *sys){
       for ( j=0; j<pnl->shape; j++ ) {
         x = pnl->vtx[j];
         for ( k=0; k<3; k++ ) {
-          if ( x[k] > up[k] ) up[k] = x[k];
-          if ( x[k] < lo[k] ) lo[k] = x[k];
+          //if ( x[k] > up[k] ) up[k] = x[k];
+          up[k] = x[k] > up[k] ? x[k] : up[k];
+          //if ( x[k] < lo[k] ) lo[k] = x[k];
+          lo[k] = x[k] < lo[k] ? x[k] : lo[k];
         }
       }
     }
@@ -301,8 +307,10 @@ void getEnclBoxs(ssystem *sys){
       for ( i=1; i<cb->nKids; i++ ) {
         kid = cb->kids[i];
         for ( k=0; k<3; k++ ) {
-          if ( kid->eBoxUp[k] > up[k] ) up[k] = kid->eBoxUp[k];
-          if ( kid->eBoxLo[k] < lo[k] ) lo[k] = kid->eBoxLo[k];
+          //if ( kid->eBoxUp[k] > up[k] ) up[k] = kid->eBoxUp[k];
+          up[k] = kid->eBoxUp[k] > up[k] ? kid->eBoxUp[k] : up[k];
+          //if ( kid->eBoxLo[k] < lo[k] ) lo[k] = kid->eBoxLo[k];
+          lo[k] = kid->eBoxLo[k] < lo[k] ? kid->eBoxLo[k] : lo[k];
         }
       }
       cb->x[0] = 0.5*(lo[0] + up[0]);
@@ -363,7 +371,7 @@ void getNbrs(ssystem *sys) {
   for ( n2Nbrs=0, cb=sys->cubeList[sys->height]; cb!=NULL; cb=cb->next ) n2Nbrs++;
 
   for ( cb=sys->cubeList[sys->height]; cb!=NULL; cb=cb->next ) {
-    CALLOC(nbrList, n2Nbrs, cube*, ON, ACUBES);
+    CALLOC(nbrList, n2Nbrs, cube*);
     cb->nbrs = nbrList;
     for ( nNbrs=0, nbr=sys->cubeList[sys->height]; nbr!=NULL; nbr=nbr->next ) {
       if ( near(cb,nbr) ) nNbrs++;
@@ -395,11 +403,14 @@ void getNbrs(ssystem *sys) {
         nbrParent = parent->nbrs[nP];
         for ( nK=0; nK<nbrParent->nKids; nK++ ) {
           nbr = nbrParent->kids[nK];
-          if ( near(nbr,cb) ) nNbrs++;
+          if ( near(nbr,cb) ) {
+            nNbrs++;
+            if ( near(nbr, cb)==2 ) cb->nthKid = nNbrs;
+          }
           n2Nbrs++;
         }
       }
-      CALLOC(nbrList, n2Nbrs, cube*, ON, ACUBES);
+      CALLOC(nbrList, n2Nbrs, cube*);
       cb->nbrs = nbrList;
       for ( nP=0, i1=1, i2=nNbrs; nP<parent->nNbrs; nP++ ) {
         nbrParent = parent->nbrs[nP];
@@ -408,7 +419,6 @@ void getNbrs(ssystem *sys) {
           flag = near(cb,nbr);
           if ( flag==1 ) {
             nbrList[i1++] = nbr;
-//            printf("%d\n",i1);
           }
           else if ( flag==2 ) {
             nbrList[0] = nbr;
@@ -427,44 +437,6 @@ void getNbrs(ssystem *sys) {
 } /* getNbrs */
 
 
-/*
- *  Fill in remaining members of panel structure,
- *  esp., pnl->a are the edges of the panel.
- *  The edges follow the orientation of the panel. Edge k is opposite vertex k.
- */
-void fillPanels(panel *pnlList) {
-  panel *pnl;
-  int i, k, l;
-  double corners[3][3];
-  double *nrm, *a, *b, len;
-
-  for ( i=0,pnl=pnlList; pnl!=NULL; pnl=pnl->next,i++ ) {
-    /* centroid, edges */
-    for ( l=0; l<3; l++ ) {
-      pnl->a[0][l] = pnl->vtx[2][l] - pnl->vtx[1][l];
-      pnl->a[1][l] = pnl->vtx[0][l] - pnl->vtx[2][l];
-      pnl->a[2][l] = pnl->vtx[1][l] - pnl->vtx[0][l];
-//      printf("%f %f %f\n",pnl->vtx[l][0],pnl->vtx[l][1],pnl->vtx[l][2]);
-    }
-//    printf("%d\n",i);
-
-    /* normal, area */
-    nrm = pnl->normal;
-/*  msms carrys normal vector but different from what we get here  */
-
-    a = pnl->a[2];
-    b = pnl->a[0];
-    nrm[0] = a[1]*b[2] - a[2]*b[1];
-    nrm[1] = a[2]*b[0] - a[0]*b[2];
-    nrm[2] = a[0]*b[1] - a[1]*b[0];
-//    printf("%f %f %f\n",nrm[0],nrm[1],nrm[2]);
-
-    len = sqrt(SQR(nrm[0]) + SQR(nrm[1]) + SQR(nrm[2]));
-    pnl->area = 0.5*len;
-    pnl->area2 = 2.0*sqrt(pnl->area);
-    for ( l=0; l<3; l++ ) nrm[l] /= len;
-  }
-} /* fillPanels */
 
 
 /*  main driver in this file
@@ -473,7 +445,7 @@ void fillPanels(panel *pnlList) {
  */
 void gkInit(ssystem *sys, panel *pnlList, int order, int orderMom ) {
   int nPnls, i, j, k, l, lev, cnt;
-  double area, dist2, minDist2, point[3];
+  double area, dist2, minDist2;
   panel *pnl, *pnl1;
   cube *cb, *topCube, **nbrs;
   time_t time1, time2;
@@ -481,11 +453,10 @@ void gkInit(ssystem *sys, panel *pnlList, int order, int orderMom ) {
   maxLev = sys->depth;
   eta0 = sys->maxSepRatio;
 
-  fillPanels(pnlList);
   nPnls = loopPanels(sys, pnlList);
   eps = sideLen[0]*EPS;
 
-  CALLOC(topCube, 1, cube, ON, ACUBES);
+  CALLOC(topCube, 1, cube);
   topCube->level = 0;
   topCube->i = topCube->j = topCube->k = 0;
   firstCube = NULL;
@@ -494,16 +465,14 @@ void gkInit(ssystem *sys, panel *pnlList, int order, int orderMom ) {
    * insert panels into finest-level cubes
    */
   for ( pnl = pnlList; pnl != NULL; pnl = pnl->next) {
-    for (l=0; l<3; l++ ) {
-      point[l] = pnl->x[l];
-    }
-    cb = goDown(point, topCube);
+    cb = goDown(pnl->x, topCube);
 
+    /* append the panel to the end of cube */
     if ( (cb->pnls) == NULL ) {
       cb->pnls = pnl;
-    }
-    else {
-      for ( pnl1=cb->pnls, j=1; j<cb->nPnls; j++ ) pnl1=pnl1->nextC;
+    } else {
+      pnl1 = cb->pnls;
+      while ( pnl1->nextC != NULL ) pnl1 = pnl1->nextC;
       pnl1->nextC = pnl;
     }
     cb->nPnls++;
@@ -511,15 +480,22 @@ void gkInit(ssystem *sys, panel *pnlList, int order, int orderMom ) {
   }
 
   /* crate linked lists of cubes */
-  CALLOC(lastCbLst, maxLev+1, cube*, ON, ACUBES);
-  CALLOC(firstCbLst, maxLev+1, cube*, ON, ACUBES);
+  CALLOC(lastCbLst, maxLev+1, cube*);
+  CALLOC(firstCbLst, maxLev+1, cube*);
   sys->cubeList = firstCbLst;
   linkcubes(topCube);
   sys->pnlLst = sys->cubeList[maxLev]->pnls;
-  countRecurse(topCube);
-  for ( i=0, pnl=sys->pnlLst; pnl!=NULL; pnl=pnl->nextC ) {
-    pnl->idx = i++;
+  sys->maxlevCudes = sys->maxlevnPnls = 0;
+  for ( cb=sys->cubeList[maxLev]; cb!=NULL; cb=cb->next ) {
+    sys->maxlevnPnls = cb->nPnls > sys->maxlevnPnls ? cb->nPnls : sys->maxlevnPnls;
+    sys->maxlevCudes++;
   }
+  //printf("%d\n", firstCbLst[3]->nPnls);
+  //exit(0);
+  //printf("The finest level contains %d cubes of %d imagine cubes\n",
+  //       sys->maxlevCudes, (int)pow(8, maxLev));
+  //countRecurse(topCube);
+  for ( i=0, pnl=sys->pnlLst; pnl!=NULL; pnl=pnl->nextC ) pnl->idx = i++;
 
   getEnclBoxs(sys);
   getNbrs(sys);

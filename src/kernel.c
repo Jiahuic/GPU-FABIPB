@@ -53,6 +53,7 @@ void kernelDC0( double r, int p, double *G ) {
  * paper, and kappa -> i*kappa.
  * Note that the paper has a typo in the recurrence formula
  */
+// Would change the subroutine name later
 void kernelDS0( double r, int p, double *G ) {
   double rexp, r1, r2, kappa2;
   int k;
@@ -70,11 +71,32 @@ void kernelDS0( double r, int p, double *G ) {
   }
 
 #if NUMKERNEL
-    numKernCplxEval += (p+1);
+  numKernCplxEval += (p+1);
 #endif
 
 } /* kernelD */
 
+void kernelDG0DGk( double r, int p, double *G0, double *Gk ) {
+  double rexp, r1, r2, nr2, kappa2;
+  int k;
+
+  kappa2 = SQR(kappa);
+  rexp = exp( -kappa*r );
+  r1 = 1.0/r;
+  r2 = SQR(r1);
+  nr2 = -r2;
+
+  G0[0] = r1*fourPiI;
+  Gk[0] = rexp*G0[0];
+
+  G0[1] = nr2*G0[0];
+  Gk[1] = -Gk[0]*(r2 + kappa*r1);
+
+  for ( k=1; k<p; k++ ) {
+    G0[k+1] = (2*k+1)*nr2*G0[k];
+    Gk[k+1] = r2*(kappa2*Gk[k-1] - (2*k+1)*Gk[k]);
+  }
+}
 
 /*
  * kernel of the single layer operator
@@ -85,7 +107,7 @@ void kernelKER4( double *x, double *y) {
   double ddG0dxdy, ddGkdxdy;
 
   //printf("%f %f %f\n",x[0],x[1],x[2],x[3]);
-  r2 = x[0]*x[0] + x[1]*x[1] + x[2]*x[2];
+  r2 = SQR(x[0]) + SQR(x[1]) + SQR(x[2]);
   r = sqrt(r2);
   expKa = exp(-kappa*r);
   //printf("%f %f %f\n",nrmY[0],nrmY[1],nrmY[2]);
@@ -125,7 +147,7 @@ void kernelKER4( double *x, double *y) {
 void kernelRHS( double *x, double *y) {
   double ri, r2, r3i, ip;
 
-  r2 = x[0]*x[0] + x[1]*x[1] + x[2]*x[2];
+  r2 = SQR(x[0]) + SQR(x[1]) + SQR(x[2]);
   ri = 1.0/sqrt(r2);
   r3i = ri/r2;
 
@@ -137,8 +159,38 @@ void kernelRHS( double *x, double *y) {
 #if NUMKERNEL
   numKernRealEval++;
 #endif
-} /* kernel01 */
+} /* kernelRHS */
 
+void kernelPtl( double *x, double *y) {
+  double r, r2, expKa, ip0, ipX, ipY, coef;
+  double G0, Gk, dG0dy, dGkdy;
+
+  //printf("%f %f %f\n",x[0],x[1],x[2],x[3]);
+  r2 = SQR(x[0]) + SQR(x[1]) + SQR(x[2]);
+  r = sqrt(r2);
+  expKa = exp(-kappa*r);
+  //printf("%f %f %f\n",nrmY[0],nrmY[1],nrmY[2]);
+
+  ipY = nrmY[0]*x[0] + nrmY[1]*x[1] + nrmY[2]*x[2];
+  //printf("kernel %f\n",ipY);
+
+  G0 = 1.0/r*fourPiI;
+  Gk = expKa*G0;
+
+  coef = (kappa*r + 1.0)*expKa;
+
+  dG0dy = ipY*G0/r2;
+  dGkdy = coef*dG0dy;
+
+  y[0] = G0-Gk;
+  y[1] = epsilon*dGkdy - dG0dy;
+  //y[0] = G0;
+  //y[1] = -dG0dy;
+
+#if NUMKERNEL
+  numKernRealEval++;
+#endif
+} /* kernelPtl */
 
 /*
  * kernel of the adjoint double layer operator
@@ -163,7 +215,7 @@ void kernelC10( double *x, double *y) {
 void kernelC11( double *x, double *y) {
   double r, r3, r5, ip0, ipx, ipy;
 
-  r = x[0]*x[0] + x[1]*x[1] + x[2]*x[2];
+  r = SQR(x[0]) + SQR(x[1]) + SQR(x[2]);
   r5 = pow(r, -2.5);
 
   ipx = nrmX[0]*x[0] + nrmX[1]*x[1] + nrmX[2]*x[2];
@@ -196,7 +248,7 @@ void kernelS00( double *x, double *y) {
 void kernelS01( double *x, double *y) {
   double r, r2, ip, expr2;
 
-  r2 = x[0]*x[0] + x[1]*x[1] + x[2]*x[2];
+  r2 = SQR(x[0]) + SQR(x[1]) + SQR(x[2]);
   r = sqrt(r2);
   ip = nrmY[0]*x[0] + nrmY[1]*x[1] + nrmY[2]*x[2];
   expr2 = exp(-kappa*r)/r2;
@@ -215,7 +267,7 @@ void kernelS01( double *x, double *y) {
 void kernelS10( double *x, double *y) {
   double r, r2, ip, expr2;
 
-  r2 = x[0]*x[0] + x[1]*x[1] + x[2]*x[2];
+  r2 = SQR(x[0]) + SQR(x[1]) + SQR(x[2]);
   r = sqrt(r2);
   ip = nrmX[0]*x[0] + nrmX[1]*x[1] + nrmX[2]*x[2];
   expr2 = exp(-kappa*r)/r2;
@@ -233,7 +285,7 @@ void kernelS10( double *x, double *y) {
 void kernelS11( double *x, double *y) {
   double r, r2, r3, r4, expr3, ipx, ipy;
 
-  r2 = x[0]*x[0] + x[1]*x[1] + x[2]*x[2];
+  r2 = SQR(x[0]) + SQR(x[1]) + SQR(x[2]);
   r = sqrt(r2);
   r3 = pow(r,3);
 

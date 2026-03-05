@@ -20,15 +20,16 @@ double *nrmX, *nrmY;
 double **tLegA, **wLegA;
 //double intgrY[9];
 int maxQuadOrder, nKerl;
-double *intgrP, *intgr, *intgrY, intgrRHS[2];
+double *intgrP, *intgr, *intgrY, intgrRHS[2], intgrPtl[2];
 double *fcn1, *fcn2, *fcn3, *fcn4, *fcn5, *fcn6;
 
 void kernelRHS( double *x, double *y);
+void kernelPtl( double *x, double *y);
 
 /*
  *  current kernel must be turned on before using quadrature
  */
-extern void (*kernel)();
+extern void (*kernel)(double *x, double *y);
 
 
 /*
@@ -41,12 +42,12 @@ void initQuad(ssystem *sys) {
 
   maxQuadOrder = sys->maxQuadOrder;
   /* abscissas, weights of Gauss-Legendre, scaled for [0,1] */
-  CALLOC(tLegA, maxQuadOrder+1, double*, ON, AMISC );
-  CALLOC(wLegA, maxQuadOrder+1, double*, ON, AMISC );
+  CALLOC(tLegA, maxQuadOrder+1, double*);
+  CALLOC(wLegA, maxQuadOrder+1, double*);
 
   for ( qOrder=1; qOrder<=maxQuadOrder; qOrder++ ) {
-    CALLOC(tLeg, qOrder, double, ON, AMISC );
-    CALLOC(wLeg, qOrder, double, ON, AMISC );
+    CALLOC(tLeg, qOrder, double);
+    CALLOC(wLeg, qOrder, double);
     tLegA[qOrder] = tLeg;
     wLegA[qOrder] = wLeg;
     Jacobi(qOrder, 0.0, 0.0, tLeg, wLeg);
@@ -60,21 +61,21 @@ void initQuad(ssystem *sys) {
   maxQuadOrder = sys->maxQuadOrder;
   nKerl = sys->nKerl;
 
-  CALLOC(intgrP, nKerl, double, ON, AMISC);
-  CALLOC(intgr, nKerl, double, ON, AMISC);
-  CALLOC(intgrY, nKerl, double, ON, AMISC);
-  CALLOC(fcn1, nKerl, double, ON, AMISC);
-  CALLOC(fcn2, nKerl, double, ON, AMISC);
-  CALLOC(fcn3, nKerl, double, ON, AMISC);
-  CALLOC(fcn4, nKerl, double, ON, AMISC);
-  CALLOC(fcn5, nKerl, double, ON, AMISC);
-  CALLOC(fcn6, nKerl, double, ON, AMISC);
+  CALLOC(intgrP, nKerl, double);
+  CALLOC(intgr, nKerl, double);
+  CALLOC(intgrY, nKerl, double);
+  CALLOC(fcn1, nKerl, double);
+  CALLOC(fcn2, nKerl, double);
+  CALLOC(fcn3, nKerl, double);
+  CALLOC(fcn4, nKerl, double);
+  CALLOC(fcn5, nKerl, double);
+  CALLOC(fcn6, nKerl, double);
 
-  CALLOC(tLegA, 11, double*, ON, AMISC );
-  CALLOC(wLegA, 11, double*, ON, AMISC );
+  CALLOC(tLegA, 11, double*);
+  CALLOC(wLegA, 11, double*);
   for ( qOrder=1; qOrder<=10; qOrder++ ) {
-    CALLOC(tLeg, qOrder, double, ON, AMISC );
-    CALLOC(wLeg, qOrder, double, ON, AMISC );
+    CALLOC(tLeg, qOrder, double);
+    CALLOC(wLeg, qOrder, double);
     tLegA[qOrder] = tLeg;
     wLegA[qOrder] = wLeg;
   }
@@ -290,6 +291,10 @@ double *pnlThr0(int qOrder, double *a2, double *a0) {
           kernel( r4, fcn4 );
           kernel( r5, fcn5 );
           kernel( r6, fcn6 );
+          //double dist = r1[0]*r1[0]+r1[1]*r1[1]+r1[2]*r1[2];
+          //double ipY = nrmY[0]*r1[0] + nrmY[1]*r1[1] + nrmY[2]*r1[2];
+          //printf("%f %f\n", dist, ipY);
+
           for ( i=0; i<nKerl; i++ )
             intgrY[i] += (fcn1[i]+fcn3[i]+fcn4[i]
                        + fcn2[i]+fcn5[i]+fcn6[i])*wLeg[ix];
@@ -533,7 +538,8 @@ double *panelIA0(panel *pnlX, panel *pnlY ) {
   else if ( nVtx==3 ) {
     qOrder = maxQuadOrder;
     intgr = pnlThr0(qOrder, pnlX->a[2], pnlX->a[0]);
-    //for ( i=0; i<nKerl; i++ ) intgr[i] = 0.0;
+    //for ( i=0; i<nKerl; i++ ) printf("%f ", intgr[i]);
+    //printf("\n");
   }
 
   //printf("%.12e %.12e %.12e %.12e\n",4.0*intgr[1],4.0*intgr[0],4.0*intgr[3],4.0*intgr[2]);
@@ -546,6 +552,81 @@ double *panelIA0(panel *pnlX, panel *pnlY ) {
   return intgrP;
 } /* panelIA0 */
 
+
+/*
+ * Calculate the interaction of two flat panels for preconditioning
+ * Piecewise constant Galerkin discretization.
+ * Parameters:
+ *    pnlX   panel of the outside integral
+ *    pnlY   panel of the inside integral
+ */
+double *panelIA1(panel *pnlX, panel *pnlY ) {
+  int i, k, nVtx, qOrder, idxX[3], idxY[3];
+  double a0[3], b0[3], *vx0, *vy0, r0[3];
+  double dist2, diam2;
+  double *intgr;
+  /* normals are only used for double, adjoint and hypersing */
+  nrmX = pnlX->normal;
+  nrmY = pnlY->normal;
+  //printf("%f %f %f\n",nrmY[0],nrmY[1],nrmY[2]);
+  //printf("%f %f %f\n",pnlY->x[0],pnlY->x[1],pnlY->x[2]);
+  for ( i=0; i<nKerl; i++ ) intgrP[i] = 0.0;
+
+  nVtx = nrCommonVtx( pnlX, pnlY, idxX, idxY );
+  //printf("%d\n",nVtx);
+
+  if ( nVtx==0 ) {
+//    qOrder = MAX(maxQuadOrder-2,2);
+    qOrder = maxQuadOrder;
+    vx0 = pnlX->vtx[0];
+    vy0 = pnlY->vtx[0];
+    for ( k=0; k<3; k++ ){
+      r0[k] = vx0[k] - vy0[k];
+    }
+    intgr = pnlNil0(qOrder, r0, pnlX->a[2], pnlX->a[0], pnlY->a[2], pnlY->a[0]);
+    //printf("%f\n",intgr[0]);
+  }
+  else if ( nVtx==1 ) {
+//    qOrder = MAX(maxQuadOrder-1,2);
+    qOrder = maxQuadOrder;
+    intgr = pnlOne0(qOrder, pnlX->a[idxX[2]], pnlX->a[idxX[0]],
+                         pnlY->a[idxY[2]], pnlY->a[idxY[0]] );
+  }
+  else if ( nVtx==2 ) {
+    qOrder = maxQuadOrder;
+
+    intgr = pnlTwo0(qOrder, pnlX->a[idxX[2]], pnlX->a[idxX[0]],
+                          pnlY->a[idxY[0]] );
+  }
+  else if ( nVtx==-2 ) {
+    qOrder = maxQuadOrder;
+    for ( k=0; k<3; k++ ) {
+      b0[k] = -pnlY->a[idxY[0]][k];
+      a0[k] = -pnlX->a[idxX[0]][k];
+    }
+    intgr = pnlTwo0(qOrder, pnlX->a[idxX[1]], b0, a0 );
+    /*    intgr = pnlTwo0(qOrder, pnlY->a[idxY[2]], pnlY->a[idxY[0]],
+          pnlX->a[idxX[0]] );*/
+  }
+  else if ( nVtx==3 ) {
+    qOrder = maxQuadOrder;
+    intgr = pnlThr0(qOrder, pnlX->a[2], pnlX->a[0]);
+    //for ( i=0; i<nKerl; i++ ) printf("%f ", intgr[i]);
+    //printf("\n");
+  }
+
+  //printf("%.12e %.12e %.12e %.12e\n",4.0*intgr[1],4.0*intgr[0],4.0*intgr[3],4.0*intgr[2]);
+
+  for ( i=0; i<nKerl; i++ ) {
+    intgrP[i] = 4.0*pnlX->area*pnlY->area*intgr[i];
+    //intgrP[i] = 4.0*pnlY->area*intgr[i];
+  }
+
+  return intgrP;
+} /* panelIA0 */
+
+
+
 /*
  * Calculate the interaction of one flat panels and charges
  * Piecewise constant Galerkin discretization.
@@ -553,7 +634,7 @@ double *panelIA0(panel *pnlX, panel *pnlY ) {
  *    pnlX   panel of the outside integral
  *    chrY   position of the charge
  */
-double *panelRHS(int qOrder, panel *pnlX, double *chrY ) {
+double *panelRHS( int qOrder, panel *pnlX, double *chrY ) {
   int ix, jx, k, nVtx;
   double fcn[2];
   double r0[3], r[3], *ax2, *ax0;
@@ -574,9 +655,8 @@ double *panelRHS(int qOrder, panel *pnlX, double *chrY ) {
   intgrRHS[0] = 0.0; intgrRHS[1] = 0.0;
   for ( ix=0; ix<qOrder; ix++ ) {
     for ( jx=0; jx<qOrder; jx++ ) {
-      for ( k=0; k<3; k++ ){
+      for ( k=0; k<3; k++ )
         r[k] = r0[k] + tLeg[ix]*(ax2[k] + tLeg[jx]*ax0[k]);
-      }
       kernelRHS( r, fcn );
       intgrRHS[0] += fcn[0]*tLeg[ix]*wLeg[ix]*wLeg[jx];
       intgrRHS[1] += fcn[1]*tLeg[ix]*wLeg[ix]*wLeg[jx];
@@ -587,3 +667,36 @@ double *panelRHS(int qOrder, panel *pnlX, double *chrY ) {
 
   return intgrRHS;
 } /* singlepanel */
+
+double *panelPotential( int qOrder, double *chrX, panel *pnlY ) {
+  int ix, jx, k, nVtx;
+  double fcn[2];
+  double r0[3], r[3], *ax2, *ax0;
+  double *tLeg, *wLeg;
+
+  tLeg = tLegA[qOrder];
+  wLeg = wLegA[qOrder];
+
+  ax2 = pnlY->a[2];
+  ax0 = pnlY->a[0];
+
+  nrmY = pnlY->normal;
+
+  for ( k=0; k<3; k++ )
+    r0[k] = chrX[k]-pnlY->vtx[0][k];
+
+  intgrPtl[0] = 0.0; intgrPtl[1] = 0.0;
+  for ( ix=0; ix<qOrder; ix++ ) {
+    for ( jx=0; jx<qOrder; jx++ ) {
+      for ( k=0; k<3; k++ )
+        r[k] = r0[k] - tLeg[ix]*(ax2[k] + tLeg[jx]*ax0[k]);
+      kernelPtl( r, fcn );
+      intgrPtl[0] += fcn[0]*tLeg[ix]*wLeg[ix]*wLeg[jx];
+      intgrPtl[1] += fcn[1]*tLeg[ix]*wLeg[ix]*wLeg[jx];
+    }
+  }
+  intgrPtl[0] *= 2.0*pnlY->area;
+  intgrPtl[1] *= 2.0*pnlY->area;
+
+  return intgrPtl;
+}

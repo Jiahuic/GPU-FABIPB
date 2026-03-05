@@ -1,0 +1,13 @@
+build/
+build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+coulomb
+*.o
+*.out
+*.log
+.DS_Store
+msms.output

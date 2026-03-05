@@ -19,13 +19,16 @@ double **dG0;     /* workspace for setupDerivs for Coulomb */
 double *Gvalsk;   /* workspace for setupDerivs for screened Coulomb */
 double **dGk;     /* workspace for setupDerivs for screened Coulomb */
 
-double *fact, *ifact, *fact3, *ifact3;
+double *fact, *ifact, *fact3, *ifact3, *cfact3;
 int ***idx3, *sgn3;
-double *convVec1, *convVec2, *convVec3;
+double *convVec1, *convVec2;
+double *convVeck1, *convVeck2, *convVeck3;
 double *convVecR;
 extern double epsilon;
 extern double *fcnBuf1, *fcnBuf2, *fcnBuf3;  /* set up by initCalcMoments() */
-extern void (*kernelDC)(), (*kernelDS)();
+extern void (*kernelD)(double r, int p, double *G0, double *Gk);
+extern void (*kernelDC)(double r, int p, double *G);
+extern void (*kernelDS)(double r, int p, double *G);
 
 
 /*
@@ -36,11 +39,11 @@ extern void (*kernelDC)(), (*kernelDS)();
 void mkIndex(int order) {
   int i1, i2, i3, i, nn;
 
-  CALLOC(idx3, order+1, int**, ON, AMISC);
+  CALLOC(idx3, order+1, int**);
   for (i1=0; i1<=order; i1++) {
-    CALLOC(idx3[i1], order+1, int*, ON, AMISC);
+    CALLOC(idx3[i1], order+1, int*);
     for (i2=0; i2<=order; i2++) {
-      CALLOC(idx3[i1][i2], order+1, int, ON, AMISC);
+      CALLOC(idx3[i1][i2], order+1, int);
     }
   }
 
@@ -76,11 +79,11 @@ void initExpan(ssystem *sys) {
    * ifact3[i] = 1/fact3[i]
    * sgn3[i] = (-1)^i1 * (-1)^i2 * (-1)^i3
    */
-  CALLOC(fact, order+4, double, ON, AMISC);
-  CALLOC(ifact, order+4, double, ON, AMISC);
-  CALLOC(fact3, nMoments, double, ON, AMISC);
-  CALLOC(ifact3, nMoments, double, ON, AMISC);
-  CALLOC(sgn3, nMoments, int, ON, AMISC);
+  CALLOC(fact, order+4, double);
+  CALLOC(ifact, order+4, double);
+  CALLOC(fact3, nMoments, double);
+  CALLOC(ifact3, nMoments, double);
+  CALLOC(sgn3, nMoments, int);
 
   for ( fact[0]=ifact[0]=1.0, k=1; k<=order+3; k++ ) {
     fact[k] = fact[k-1]*k;
@@ -100,19 +103,22 @@ void initExpan(ssystem *sys) {
 
   mkIndex(order);
 
-  CALLOC(Gvals0, order+1, double, ON, AMISC);
-  CALLOC(dG0, order+1, double*, ON, AMISC);
-  CALLOC(Gvalsk, order+1, double, ON, AMISC);
-  CALLOC(dGk, order+1, double*, ON, AMISC);
+  CALLOC(Gvals0, order+1, double);
+  CALLOC(dG0, order+1, double*);
+  CALLOC(Gvalsk, order+1, double);
+  CALLOC(dGk, order+1, double*);
   for ( k=0; k<=order; k++ ) {
     p = order-k;
-    CALLOC(dG0[k], sys->nMom[p], double, ON, AMISC);
-    CALLOC(dGk[k], sys->nMom[p], double, ON, AMISC);
+    CALLOC(dG0[k], sys->nMom[p], double);
+    CALLOC(dGk[k], sys->nMom[p], double);
   }
 
-  CALLOC(convVecR, nMoments, double, ON, AMISC);
-  CALLOC(convVec1, nMoments, double, ON, AMISC);
-  CALLOC(convVec2, nMoments, double, ON, AMISC);
+  CALLOC(convVecR, nMoments, double);
+  CALLOC(convVec1, nMoments, double);
+  CALLOC(convVec2, nMoments, double);
+  CALLOC(convVeck1, nMoments, double);
+  CALLOC(convVeck2, nMoments, double);
+  CALLOC(convVeck3, nMoments, double);
 } /* initTaylorCoeffs */
 
 
@@ -127,15 +133,12 @@ void setupDerivs(int order, double *x ) {
   int p, p1, iRow, iRow1, i1, i2, i3, idx, idx1, idx2, n;
 
   r = sqrt(SQR(x[0]) + SQR(x[1]) + SQR(x[2]));
-  kernelDC( r, order, Gvals0 );
-  kernelDS( r, order, Gvalsk );
-  //for ( p=0;p<order+1;p++ ) printf("%f %f\n",Gvals0[p],Gvalsk[p]);
+  kernelD( r, order, Gvals0, Gvalsk );
 
   /* 0th order derivatives */
   for (p=0; p<=order; p++ ) {
     dG0[p][0] = Gvals0[p];
     dGk[p][0] = Gvalsk[p];
-    //printf("%f %f\n",dG0[p][0],dGk[p][0]);
   }
 
   /* 1st order derivatives */
@@ -160,7 +163,6 @@ void setupDerivs(int order, double *x ) {
       idx2 = idx3[0][0][iRow-2];
       dG0[p][idx] = dG0[p1][idx1]*x[2] + dG0[p1][idx2]*iRow1;
       dGk[p][idx] = dGk[p1][idx1]*x[2] + dGk[p1][idx2]*iRow1;
-      //printf("%f %f\n",dG0[p][idx],dGk[p][idx]);
       idx++;
       /* i1 = 0, i2 = 1, i3 = iRow-1 */
       idx1 = idx3[0][0][iRow1];
@@ -225,10 +227,8 @@ void convM2M(int order, double *a, double *b, double *c, double *d, double *e){
             j2 = i2 - k2;
             for ( k3=0; k3<=i3; k3++ ) {
               j3 = i3 - k3;
-              tmp = fact3[idx3[i1][i2][i3]]*a[idx3[j1][j2][j3]]
-                   *ifact3[idx3[k1][k2][k3]];
-              tmp1 += tmp*b[idx3[k1][k2][k3]];
-              tmp2 += tmp*d[idx3[k1][k2][k3]];
+              tmp1 += a[idx3[j1][j2][j3]]*b[idx3[k1][k2][k3]];
+              tmp2 += a[idx3[j1][j2][j3]]*d[idx3[k1][k2][k3]];
             }
           }
         }
@@ -249,10 +249,9 @@ void convM2M(int order, double *a, double *b, double *c, double *d, double *e){
  * This routine is additive.
  */
 void convM2L(int ordIn, int ordOut, double *c1, double *c2,
-             double *g0, double *gk, double *l1, double *l2,
-             double *l3, double *l4) {
+             double *veck1, double *veck2, double *veck3,
+             double *l1, double *l2, double *l3, double *l4) {
   int i, j, m, n, i1, i2, i3, j1, j2, j3, k1, k2, k3;
-  double kernel1, kernel2, kernel3, kernel4;
   double tmp, tmp1, tmp2, tmp3, tmp4;
 
   for ( i=n=0; n<=ordOut; n++ ) {
@@ -266,25 +265,18 @@ void convM2L(int ordIn, int ordOut, double *c1, double *c2,
               j3 = m-j1-j2;
               k2 = i2 + j2;
               k3 = i3 + j3;
-              kernel1 = g0[idx3[k1][k2][k3]]-gk[idx3[k1][k2][k3]];
-              kernel2 = epsilon*gk[idx3[k1][k2][k3]]-g0[idx3[k1][k2][k3]];
-              kernel3 = g0[idx3[k1][k2][k3]]-gk[idx3[k1][k2][k3]]/epsilon;
-              kernel4 = -kernel1;
-            //  printf("%f %f %f %f\n",kernel1,kernel2,kernel3,kernel4);
-            //  tmp = fact3[idx3[k1][k2][k3]]*ifact3[idx3[i1][i2][i3]];
-            //  tmp = ifact3[idx3[i1][i2][i3]];
-            //  printf("%d %d\n",idx3[i1][i2][i3],idx3[k1][k2][k3]);
-              tmp1 += c2[j]*kernel1;
-              tmp2 += c1[j]*kernel2;
-              tmp3 += c2[j]*kernel3;
-              tmp4 += c1[j]*kernel4;
+
+              tmp1 += c2[j]*veck1[idx3[k1][k2][k3]];
+              tmp2 += c1[j]*veck2[idx3[k1][k2][k3]];
+              tmp3 += c2[j]*veck3[idx3[k1][k2][k3]];
+              tmp4 += c1[j]*(-veck1[idx3[k1][k2][k3]]);
             }
           }
         }
-        l1[i] += ifact3[idx3[i1][i2][i3]]*tmp1;
-        l2[i] += ifact3[idx3[i1][i2][i3]]*tmp2;
-        l3[i] += ifact3[idx3[i1][i2][i3]]*tmp3;
-        l4[i] += ifact3[idx3[i1][i2][i3]]*tmp4;
+        l1[i] += tmp1;
+        l2[i] += tmp2;
+        l3[i] += tmp3;
+        l4[i] += tmp4;
       }
     }
   }
@@ -310,11 +302,10 @@ void convL2L(int ordIn, int ordOut, double *a,
               j3 = m-j1-j2;
               k2 = i2 + j2;
               k3 = i3 + j3;
-              tmp = fact3[idx3[k1][k2][k3]]*ifact3[idx3[i1][i2][i3]]*a[j];
-              tmp1 += tmp*In1[idx3[k1][k2][k3]];
-              tmp2 += tmp*In2[idx3[k1][k2][k3]];
-              tmp3 += tmp*In3[idx3[k1][k2][k3]];
-              tmp4 += tmp*In4[idx3[k1][k2][k3]];
+              tmp1 += a[j]*In1[idx3[k1][k2][k3]];
+              tmp2 += a[j]*In2[idx3[k1][k2][k3]];
+              tmp3 += a[j]*In3[idx3[k1][k2][k3]];
+              tmp4 += a[j]*In4[idx3[k1][k2][k3]];
             }
           }
         }
@@ -451,11 +442,14 @@ void transM2L(ssystem *sys, double *G0, double *Gk, cube *cbIn, cube *cbOut ) {
   lec_k3 = cbOut->lec_k3; lec_k4 = cbOut->lec_k4;
 
   for ( i=0; i<nMom; i++ ) {
-    tmp = ifact3[i]*sgn3[i];
-    convVec1[i] = tmp*mom_pot[i];
-    convVec2[i] = tmp*mom_dpdn[i];
+    convVec1[i] = sgn3[i]*mom_pot[i];
+    convVec2[i] = sgn3[i]*mom_dpdn[i];
+    convVeck1[i] = G0[i]-Gk[i];
+    convVeck2[i] = epsilon*Gk[i]-G0[i];
+    convVeck3[i] = G0[i]-Gk[i]/epsilon;
   }
-  convM2L(order, order, convVec1, convVec2, G0, Gk,
+  convM2L(order, order, convVec1, convVec2,
+          convVeck1, convVeck2, convVeck3,
           lec_k1, lec_k2, lec_k3, lec_k4);
 
 } /* transM2L */

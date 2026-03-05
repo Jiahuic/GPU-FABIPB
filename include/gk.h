@@ -7,6 +7,7 @@ struct panel {          /* panel */
   double a[3][3];       /* sides */
   double x[3];          /* centroid */
   double normal[3];     /* normal, determined by right-hand rule */
+  double nrm[3][3];     /* normals at vertices */
   double area;          /* area  */
   double area2;         /* 2*sqrt(area) */
   int shape;            /* 3=triangle, everything else generates an error */
@@ -36,6 +37,7 @@ struct cube {               /* cube, actually a cluster of panels */
   int n2Nbrs;               /* Nbr of non-empty 2nd neighbors*/
   struct cube **nbrs;       /* Nbrs and 2nd nbrs with Panels */
   int nKids;                /* Number of kids */
+  int nthKid;               /* index of this cube among parent's kids */
   struct cube *kids[8];     /* Array of kids ptrs. */
   struct cube *parent;      /* parent cube */
   double *mom_pot;          /* moments for potential */
@@ -71,8 +73,15 @@ struct ssystem {
   int maxQuadOrder;         /* maximal order for panel interactions */
   double maxSepRatio;       /* maximal separation ratio for cubes to be neighbors */
   double *pos, *chr;        /* charge position and charges for rhs */
+  int mesh_flag;            /* mesh format flag */
+  int maxlevCudes;          /* max cubes at finest level */
+  int maxlevnPnls;          /* max panels in a cube at finest level */
   panel *pnlLst;            /* linked list of panels (Contiguous wn cubes) */
   panel *pnlOLst;           /* linked list of original order panels */
   cube **cubeList;          /* heads of lists of cubes for each level */
 };
 typedef struct ssystem ssystem;
+
+typedef void (*KernelFn)(double *x, double *y);
+typedef void (*KernelDerivFn)(double r, int p, double *G);
+typedef void (*MatVecFn)(ssystem *sys, double *sgm, double *pot);

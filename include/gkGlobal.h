@@ -73,7 +73,7 @@
 
 
 
-#define CALLOC(PNTR, NUM, TYPE, FLAG, MTYP)                                 \
+#define CALLOC_FULL(PNTR, NUM, TYPE, FLAG, MTYP)                            \
 {                                                                           \
      if((NUM)*sizeof(TYPE)==0)                                              \
        (void)fprintf(stdout,                                                \
@@ -103,6 +103,8 @@
      }                                                                      \
 }
 
+/* 3-arg shorthand: defaults FLAG=OFF, MTYP=AMISC */
+#define CALLOC(PNTR, NUM, TYPE)  CALLOC_FULL(PNTR, NUM, TYPE, OFF, AMISC)
 
 #define TRUE 1
 #define FALSE 0
@@ -119,6 +121,7 @@
 /* timers */
 extern double setupBasTime, setupMatTime, setupPCTime, solveTimeNoPC, solveTimePC;
 extern double setupQ2PTime, setupQ2MTime, setupM2LTime;
+extern double fmmQ2MTime, fmmM2MTime, fmmM2LTime, fmmL2LTime, fmmL2PTime, fmmNearTime;
 /* counts of memory usage */
 extern long memcount;
 extern long memPVE, memCUBES, memQ2P, memQ2M, memM2L, memSOLVER, memMISC;
@@ -128,4 +131,5 @@ extern long numKernRealEval, numKernCplxEval;
 extern double twoPi, twoPiI, fourPi, fourPiI;
 extern double zero, one;
 extern char hChr, nChr;
+extern int oneI;
 
