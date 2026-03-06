@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <sys/time.h>
 #include "gkGlobal.h"
 #include "gk.h"
 #include "gmres.h"
@@ -41,6 +42,12 @@ int MtVmain(double *alpha, double *sgm, double *beta, double *pot);
 int PtVfmm(double *pot, double *sgm);
 
 void applyTreecode( ssystem *sys, double *sgm, double *pot );
+
+static double wall_seconds(void) {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (double)tv.tv_sec + 1.0e-6 * (double)tv.tv_usec;
+}
 /*
  *  setup right hand side (exterior Neumann problem)
  */
@@ -79,7 +86,7 @@ int main(int nargs, char *argv[]){
   double *sgm, *pot, *GMRES_work, *GMRES_h, ptl;
   static int info;
 
-  clock_t start_t, end_t;
+  double start_t, end_t;
 
   CALLOC(sys, 1, ssystem);
   sys->height = 2;
@@ -88,6 +95,7 @@ int main(int nargs, char *argv[]){
   sys->nKerl = 4;
   sys->depth = 5;
   sys->mesh_flag = 1;
+  sys->gpuMode = 0;
   sprintf(density,"1");
   double bulk_strength = 0.15;
   //kappa = sqrt(8.430325455*bulk_strength/epsilon2);
@@ -121,6 +129,8 @@ int main(int nargs, char *argv[]){
           break;
         case 'm': sys->mesh_flag = atoi( argv[i]+3 );
           break;
+        case 'g': sys->gpuMode = atoi( argv[i]+3 );
+          break;
       }
     else {
       strcpy(panelfile,argv[i]);
@@ -152,6 +162,7 @@ int main(int nargs, char *argv[]){
   printf("GMRES variables: tol=%1.e arnoldiSz=%d maxIt=%d\n",
     tolpar, arnoldiSz, numItr);
   printf("kappa=%f, eps1=%f, eps2=%f\n", kappa, epsilon1, epsilon2);
+  printf("GPU mode=%d (0=CPU fallback)\n", sys->gpuMode);
   //printf("----------------------------\n");
 
 
@@ -159,7 +170,7 @@ int main(int nargs, char *argv[]){
    * get panels by msms from pqr
    * or use the panel on sphere test example
    */
-  start_t = clock();
+  start_t = wall_seconds();
   inputLst = loadPanel(panelfile, density, &nPnls, sys);
   sys->pnlOLst = inputLst;
 
@@ -187,8 +198,8 @@ int main(int nargs, char *argv[]){
 
   applyTreecode( sys, sgm, &ptl );
   ptl *= twoPi*para;
-  end_t = clock()-start_t;
-  printf("ttl time: %f, gmres-its=%d\n", (double)end_t / CLOCKS_PER_SEC, numItr);
+  end_t = wall_seconds() - start_t;
+  printf("ttl time: %f, gmres-its=%d\n", end_t, numItr);
   printf("solvation energy: %f\n", ptl);
 
 }

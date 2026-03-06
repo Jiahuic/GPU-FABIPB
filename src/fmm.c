@@ -14,6 +14,7 @@
 #include <math.h>
 #include "gkGlobal.h"
 #include "gk.h"
+#include "gpu_backend.h"
 
 #define STOREM2L 0
 #define SETUPONLY 0
@@ -116,11 +117,11 @@ void setupFMM(ssystem *sys) {
  * by at Here.
  * Same parameters as applyFMM().
  */
-void applyNearfield1(ssystem *sys, double *alpha, double *sgm, double *beta, double *pot) {
+static void applyNearfield1CPU(ssystem *sys, double *alpha, double *sgm, double *pot) {
   cube *cb, *cb1;
   double *x_pot, *y_pot, *x_dpdn, *y_dpdn, *KER;
   int inbr, nNbrs, idx, nPnls=sys->nPnls;
-  int i, j, k, n, n1, inc=1;
+  int i, j, n, n1;
   panel *pnlX, *pnlY;
 
   /* set up kernel */
@@ -145,6 +146,27 @@ void applyNearfield1(ssystem *sys, double *alpha, double *sgm, double *beta, dou
       }
     }
   }
+} /* applyNearfield1CPU */
+
+void applyNearfield1(ssystem *sys, double *alpha, double *sgm, double *beta, double *pot) {
+  static int warnedNoGpuBackend = 0;
+
+  if (sys->gpuMode > 0) {
+    if (gpuNearfieldApply(sys, *alpha, sgm, pot)) {
+      return;
+    }
+    if (!warnedNoGpuBackend) {
+      if (!gpuBackendAvailable()) {
+        printf("GPU backend requested but unavailable; using CPU nearfield path.\n");
+      } else {
+        printf("GPU backend selected but nearfield kernel is not ported yet; using CPU fallback.\n");
+      }
+      warnedNoGpuBackend = 1;
+    }
+  }
+
+  applyNearfield1CPU(sys, alpha, sgm, pot);
+  (void)beta;
 } /* applyNearfield1 */
 
 

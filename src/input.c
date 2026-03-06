@@ -17,11 +17,17 @@
 int nSurf = 0;
 
 /* Build file path: use panelfile as-is if it contains '/', else prepend fpath */
-static void buildPath(char *fname, const char *fpath, const char *panelfile, const char *ext) {
+static void buildPath(char *fname, size_t fnameSize, const char *fpath, const char *panelfile, const char *ext) {
+  int nwritten;
   if (strchr(panelfile, '/') != NULL) {
-    sprintf(fname, "%s%s", panelfile, ext);
+    nwritten = snprintf(fname, fnameSize, "%s%s", panelfile, ext);
   } else {
-    sprintf(fname, "%s%s%s", fpath, panelfile, ext);
+    nwritten = snprintf(fname, fnameSize, "%s%s%s", fpath, panelfile, ext);
+  }
+
+  if (nwritten < 0 || (size_t)nwritten >= fnameSize) {
+    fprintf(stderr, "Error: generated path is too long for buffer\n");
+    exit(1);
   }
 }
 
@@ -68,7 +74,7 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
   /* read in vertices */
   sys->nChar = 0;
   sprintf(fpath,"test_proteins/");
-  buildPath(fname, fpath, panelfile, ".pqr");
+  buildPath(fname, sizeof(fname), fpath, panelfile, ".pqr");
   fp=fopen(fname,"r");
   if (fp == NULL) {
     fprintf(stderr, "Error: cannot open PQR file '%s'\n", fname);
@@ -76,7 +82,7 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
     fprintf(stderr, "       or coulomb <path> (e.g. coulomb test_proteins/1a63)\n");
     exit(1);
   }
-  buildPath(fname, fpath, panelfile, ".xyzr");
+  buildPath(fname, sizeof(fname), fpath, panelfile, ".xyzr");
   wfp=fopen(fname,"w");
   /* new version of pqr file, 11 entries per line */
   /*while(fscanf(fp,"%s %s %s %s %s %lf %lf %lf %lf %lf %s",c1,c2,c3,
@@ -97,7 +103,7 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
 
   CALLOC(sys->pos, 3*sys->nChar, double);
   CALLOC(sys->chr, sys->nChar, double);
-  buildPath(fname, fpath, panelfile, ".pqr");
+  buildPath(fname, sizeof(fname), fpath, panelfile, ".pqr");
   fp=fopen(fname,"r");
   for ( i=0; i<sys->nChar; i++ ){
     /* new version of pqr file, 11 entries per line */
@@ -120,10 +126,16 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
   /* run msms */
     {
       char xyzrpath[256], ofbase[256];
-      buildPath(xyzrpath, fpath, panelfile, ".xyzr");
-      buildPath(ofbase, fpath, panelfile, "");
-      sprintf(fname,"msms -if %s -prob 1.4 -de %s -of %s > msms.output",
-                  xyzrpath, density, ofbase);
+      int nwritten;
+      buildPath(xyzrpath, sizeof(xyzrpath), fpath, panelfile, ".xyzr");
+      buildPath(ofbase, sizeof(ofbase), fpath, panelfile, "");
+      nwritten = snprintf(fname, sizeof(fname),
+                          "msms -if %s -prob 1.4 -de %s -of %s > msms.output",
+                          xyzrpath, density, ofbase);
+      if (nwritten < 0 || (size_t)nwritten >= sizeof(fname)) {
+        fprintf(stderr, "Error: msms command is too long for buffer\n");
+        exit(1);
+      }
     }
     //printf("%s\n",fname);
     ierr=system(fname);
@@ -135,7 +147,7 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
     fprintf(wfp, "Grid_perfil = 90.0\n");
     {
       char xyzrpath[256];
-      buildPath(xyzrpath, fpath, panelfile, ".xyzr");
+      buildPath(xyzrpath, sizeof(xyzrpath), fpath, panelfile, ".xyzr");
       fprintf(wfp, "XYZR_FileName = %s\n", xyzrpath);
     }
     fprintf(wfp, "Build_epsilon_maps = false\n");
@@ -161,9 +173,9 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
     ierr = system("NanoShaper >> nsout.txt");
     remove("nsout.txt");
 
-    buildPath(fname, fpath, panelfile, ".face");
+    buildPath(fname, sizeof(fname), fpath, panelfile, ".face");
     rename("triangulatedSurf.face", fname);
-    buildPath(fname, fpath, panelfile, ".vert");
+    buildPath(fname, sizeof(fname), fpath, panelfile, ".vert");
     rename("triangulatedSurf.vert", fname);
 
     remove("stderror.txt");
@@ -175,7 +187,7 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
   /*======================================================================*/
 
   /* read in vert */
-  buildPath(fname, fpath, panelfile, ".vert");
+  buildPath(fname, sizeof(fname), fpath, panelfile, ".vert");
   fp=fopen(fname,"r");
   if (fp == NULL) {
     fprintf(stderr, "Error: cannot open vertices file '%s' (run msms first)\n", fname);
@@ -216,7 +228,7 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
   fclose(fp);
 
   /* read in faces */
-  buildPath(fname, fpath, panelfile, ".face");
+  buildPath(fname, sizeof(fname), fpath, panelfile, ".face");
   fp=fopen(fname,"r");
   if (fp == NULL) {
     fprintf(stderr, "Error: cannot open faces file '%s'\n", fname);
@@ -329,13 +341,13 @@ panel *loadPanel(char *panelfile, char *density, int *numSing, ssystem *sys) {
 
   {
     char rmcmd[512];
-    buildPath(fname, fpath, panelfile, ".xyzr");
+    buildPath(fname, sizeof(fname), fpath, panelfile, ".xyzr");
     sprintf(rmcmd,"rm %s",fname);
     ierr=system(rmcmd);
-    buildPath(fname, fpath, panelfile, ".vert");
+    buildPath(fname, sizeof(fname), fpath, panelfile, ".vert");
     sprintf(rmcmd,"rm %s",fname);
     ierr=system(rmcmd);
-    buildPath(fname, fpath, panelfile, ".face");
+    buildPath(fname, sizeof(fname), fpath, panelfile, ".face");
     sprintf(rmcmd,"rm %s",fname);
     ierr=system(rmcmd);
   }

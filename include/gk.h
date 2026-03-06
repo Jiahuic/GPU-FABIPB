@@ -74,6 +74,7 @@ struct ssystem {
   double maxSepRatio;       /* maximal separation ratio for cubes to be neighbors */
   double *pos, *chr;        /* charge position and charges for rhs */
   int mesh_flag;            /* mesh format flag */
+  int gpuMode;              /* 0=CPU only, >0 request GPU backend */
   int maxlevCudes;          /* max cubes at finest level */
   int maxlevnPnls;          /* max panels in a cube at finest level */
   panel *pnlLst;            /* linked list of panels (Contiguous wn cubes) */

@@ -36,6 +36,21 @@ Build:
 cmake --build build
 ```
 
+For cross-machine performance comparisons (Linux vs macOS), use a consistent
+benchmark setup:
+
+```sh
+./scripts/run_apples_to_apples.sh test_proteins/1a7m
+```
+
+This script enforces:
+- `Release` build
+- `OpenBLAS` selection (`-DFMM_PB_BLA_VENDOR=OpenBLAS`)
+- single-thread runtime (`OMP_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`,
+  `MKL_NUM_THREADS=1`, `VECLIB_MAXIMUM_THREADS=1`, `BLIS_NUM_THREADS=1`)
+
+If `OpenBLAS` is unavailable, install it first (see `docs/dependencies.md`).
+
 Clean rebuild:
 
 ```sh
@@ -47,6 +62,15 @@ cmake --build build
 The configure step checks BLAS and LAPACK up front and stops immediately if either is missing.
 
 If BLAS/LAPACK live in non-default locations, pass the usual CMake search hints, for example through `CMAKE_PREFIX_PATH`.
+
+GPU backend scaffold (CUDA, optional):
+
+```sh
+cmake -S . -B build -DFMM_PB_ENABLE_CUDA=ON
+cmake --build build
+```
+
+At runtime, pass `-g=1` to request the GPU near-field backend. If the backend is unavailable or not yet fully implemented, the solver falls back to the CPU path.
 
 ## Run
 

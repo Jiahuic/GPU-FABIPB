@@ -1,6 +1,11 @@
 #include <math.h>
 #include <time.h>
 #include "gkGlobal.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 double gkInitTime, setupFMMTime, setupRHSTime, gmresTime;
 double solveTimeNoPC, solveTimePC;
 double setupQ2PTime, setupQ2MTime, setupM2LTime;
