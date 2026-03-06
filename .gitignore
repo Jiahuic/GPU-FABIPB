@@ -11,3 +11,5 @@ coulomb
 *.log
 .DS_Store
 msms.output
+triangles.txt
+msms.*

@@ -50,12 +50,14 @@ cmake -S . -B build
 cmake --build build
 ```
 
-If your system requires `libf2c`, enable it during configure:
+If your system requires `libf2c`, require it during configure:
 
 ```sh
-cmake -S . -B build -DFMM_PB_USE_F2C=ON
+cmake -S . -B build -DFMM_PB_REQUIRE_F2C=ON
 cmake --build build
 ```
+
+The configure step now checks BLAS and LAPACK up front and stops immediately if either is missing. `libf2c` is detected automatically when present, and can be made mandatory with `FMM_PB_REQUIRE_F2C=ON`.
 
 If BLAS/LAPACK live in non-default locations, pass the usual CMake search hints, for example through `CMAKE_PREFIX_PATH`.
 

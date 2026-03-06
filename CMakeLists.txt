@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-option(FMM_PB_USE_F2C "Link against libf2c explicitly" OFF)
+option(FMM_PB_REQUIRE_F2C "Fail configure unless libf2c is available" OFF)
 
 set(FMM_PB_SOURCES
   src/coulomb.c
@@ -30,8 +30,21 @@ target_include_directories(coulomb
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-find_package(BLAS REQUIRED)
-find_package(LAPACK REQUIRED)
+find_package(BLAS QUIET)
+if(NOT BLAS_FOUND)
+  message(FATAL_ERROR
+    "BLAS was not found. This project requires an installed BLAS library. "
+    "libf2c is not a replacement for BLAS because src/gmres.c calls BLAS "
+    "routines directly."
+  )
+endif()
+
+find_package(LAPACK QUIET)
+if(NOT LAPACK_FOUND)
+  message(FATAL_ERROR
+    "LAPACK was not found. Please install LAPACK and rerun CMake."
+  )
+endif()
 
 target_link_libraries(coulomb
   PRIVATE
@@ -43,9 +56,14 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(coulomb PRIVATE m)
 endif()
 
-if(FMM_PB_USE_F2C)
-  find_library(F2C_LIBRARY NAMES f2c REQUIRED)
+find_library(F2C_LIBRARY NAMES f2c)
+
+if(F2C_LIBRARY)
   target_link_libraries(coulomb PRIVATE ${F2C_LIBRARY})
+elseif(FMM_PB_REQUIRE_F2C)
+  message(FATAL_ERROR
+    "FMM_PB_REQUIRE_F2C is ON, but libf2c was not found."
+  )
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -54,4 +72,5 @@ endif()
 
 message(STATUS "BLAS libraries: ${BLAS_LIBRARIES}")
 message(STATUS "LAPACK libraries: ${LAPACK_LIBRARIES}")
-message(STATUS "Use libf2c: ${FMM_PB_USE_F2C}")
+message(STATUS "libf2c library: ${F2C_LIBRARY}")
+message(STATUS "Require libf2c: ${FMM_PB_REQUIRE_F2C}")
