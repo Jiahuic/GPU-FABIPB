@@ -6,8 +6,6 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-option(FMM_PB_REQUIRE_F2C "Fail configure unless libf2c is available" OFF)
-
 set(FMM_PB_SOURCES
   src/coulomb.c
   src/gkSetup.c
@@ -56,21 +54,9 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(coulomb PRIVATE m)
 endif()
 
-find_library(F2C_LIBRARY NAMES f2c)
-
-if(F2C_LIBRARY)
-  target_link_libraries(coulomb PRIVATE ${F2C_LIBRARY})
-elseif(FMM_PB_REQUIRE_F2C)
-  message(FATAL_ERROR
-    "FMM_PB_REQUIRE_F2C is ON, but libf2c was not found."
-  )
-endif()
-
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
   target_compile_options(coulomb PRIVATE -g)
 endif()
 
 message(STATUS "BLAS libraries: ${BLAS_LIBRARIES}")
 message(STATUS "LAPACK libraries: ${LAPACK_LIBRARIES}")
-message(STATUS "libf2c library: ${F2C_LIBRARY}")
-message(STATUS "Require libf2c: ${FMM_PB_REQUIRE_F2C}")

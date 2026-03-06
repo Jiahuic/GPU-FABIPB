@@ -20,12 +20,6 @@ Required:
 - BLAS
 - LAPACK
 
-Optional, platform-dependent:
-
-- `libf2c` for the translated GMRES routine on systems where BLAS/LAPACK packages do not already provide the required symbols
-
-The repository currently keeps a local copy of [`include/f2c.h`](/Users/jiahuic/Garage/electrostatics/fmm_PB/include/f2c.h) as a compatibility header for the translated source in [`src/gmres.c`](/Users/jiahuic/Garage/electrostatics/fmm_PB/src/gmres.c). That is only a header, not a bundled install script or vendored binary library.
-
 Install notes are in [`docs/dependencies.md`](/Users/jiahuic/Garage/electrostatics/fmm_PB/docs/dependencies.md).
 
 ## Build
@@ -50,14 +44,7 @@ cmake -S . -B build
 cmake --build build
 ```
 
-If your system requires `libf2c`, require it during configure:
-
-```sh
-cmake -S . -B build -DFMM_PB_REQUIRE_F2C=ON
-cmake --build build
-```
-
-The configure step now checks BLAS and LAPACK up front and stops immediately if either is missing. `libf2c` is detected automatically when present, and can be made mandatory with `FMM_PB_REQUIRE_F2C=ON`.
+The configure step checks BLAS and LAPACK up front and stops immediately if either is missing.
 
 If BLAS/LAPACK live in non-default locations, pass the usual CMake search hints, for example through `CMAKE_PREFIX_PATH`.
 

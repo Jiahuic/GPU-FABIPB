@@ -13,6 +13,7 @@
 #include <string.h>
 #include "gkGlobal.h"
 #include "gk.h"
+#include "gmres.h"
 
 /* global variables */
 int orderMom=0;
@@ -38,10 +39,6 @@ double *panelRHS(int qOrder, panel *pnlX, double *chrY );
 
 int MtVmain(double *alpha, double *sgm, double *beta, double *pot);
 int PtVfmm(double *pot, double *sgm);
-
-int gmres_(long int *n, double *b, double *x, long int *arnoldiSz, double *work,
-           long int *ldw, double *h, long int *ldh, long int *iter, double *resid,
-           int (*matvec)(), int (*psolve)(), long int *info);
 
 void applyTreecode( ssystem *sys, double *sgm, double *pot );
 /*
@@ -75,12 +72,12 @@ int main(int nargs, char *argv[]){
   char panelfile[80], density[80];
   int order=-1, image=0, refineLev=0, numSurfOne=1;
   int i, j, k, n, nPnls, nChar;
-  long int numItr=100, arnoldiSz=30, ldw, ldh;
+  int numItr=100, arnoldiSz=30, ldw, ldh;
   panel *inputLst, *pnl;
   cube *cb;
   double tolpar=1.0e-4, para=332.0716;
   double *sgm, *pot, *GMRES_work, *GMRES_h, ptl;
-  static long int info;
+  static int info;
 
   clock_t start_t, end_t;
 
@@ -152,7 +149,7 @@ int main(int nargs, char *argv[]){
   printf("----------------------------\n");
   printf("FMM variables: nLev=%d ord=%d SepRat=%lg qOrd=%d\n",
     sys->depth, order, sys->maxSepRatio, sys->maxQuadOrder );
-  printf("GMRES variables: tol=%1.e arnoldiSz=%ld maxIt=%ld\n",
+  printf("GMRES variables: tol=%1.e arnoldiSz=%d maxIt=%d\n",
     tolpar, arnoldiSz, numItr);
   printf("kappa=%f, eps1=%f, eps2=%f\n", kappa, epsilon1, epsilon2);
   //printf("----------------------------\n");
@@ -185,13 +182,13 @@ int main(int nargs, char *argv[]){
   CALLOC(GMRES_work, ldw*(arnoldiSz+4), double);
   CALLOC(GMRES_h, ldh*(arnoldiSz+2), double);
 
-  gmres_(&ldw, pot, sgm, &arnoldiSz, GMRES_work, &ldw, GMRES_h, &ldh,
-         &numItr, &tolpar, MtV, PtV, &info);
+  gmres(ldw, pot, sgm, arnoldiSz, GMRES_work, ldw, GMRES_h, ldh,
+        &numItr, &tolpar, MtV, PtV, &info);
 
   applyTreecode( sys, sgm, &ptl );
   ptl *= twoPi*para;
   end_t = clock()-start_t;
-  printf("ttl time: %f, gmres-its=%ld\n", (double)end_t / CLOCKS_PER_SEC, numItr);
+  printf("ttl time: %f, gmres-its=%d\n", (double)end_t / CLOCKS_PER_SEC, numItr);
   printf("solvation energy: %f\n", ptl);
 
 }

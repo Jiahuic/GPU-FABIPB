@@ -1,32 +1,24 @@
-/* GMRES.f -- translated by f2c (version of 20 August 1993  13:15:44).
-   You must link the resulting object file with the libraries:
-	-lf2c -lm   (in that order)
-*/
+#include <math.h>
 
-#include "f2c.h"
-#include <stdio.h>
+#include "gmres.h"
 
 /* BLAS prototypes */
-extern int dcopy_(integer *n, doublereal *dx, integer *incx, doublereal *dy, integer *incy);
-extern doublereal dnrm2_(integer *n, doublereal *x, integer *incx);
-extern int dscal_(integer *n, doublereal *da, doublereal *dx, integer *incx);
-extern int drot_(integer *n, doublereal *dx, integer *incx, doublereal *dy, integer *incy, doublereal *c, doublereal *s);
-extern int drotg_(doublereal *da, doublereal *db, doublereal *c, doublereal *s);
-extern doublereal ddot_(integer *n, doublereal *dx, integer *incx, doublereal *dy, integer *incy);
-extern int daxpy_(integer *n, doublereal *da, doublereal *dx, integer *incx, doublereal *dy, integer *incy);
-extern int dtrsv_(char *uplo, char *trans, char *diag, integer *n, doublereal *a, integer *lda, doublereal *x, integer *incx, ftnlen uplo_len, ftnlen trans_len, ftnlen diag_len);
-extern int dgemv_(char *trans, integer *m, integer *n, doublereal *alpha, doublereal *a, integer *lda, doublereal *x, integer *incx, doublereal *beta, doublereal *y, integer *incy, ftnlen trans_len);
+extern int dcopy_(const int *n, const double *dx, const int *incx, double *dy, const int *incy);
+extern double dnrm2_(const int *n, const double *x, const int *incx);
+extern int dscal_(const int *n, const double *da, double *dx, const int *incx);
+extern int drot_(const int *n, double *dx, const int *incx, double *dy, const int *incy, const double *c, const double *s);
+extern int drotg_(double *da, double *db, double *c, double *s);
+extern double ddot_(const int *n, const double *dx, const int *incx, const double *dy, const int *incy);
+extern int daxpy_(const int *n, const double *da, const double *dx, const int *incx, double *dy, const int *incy);
+extern int dtrsv_(const char *uplo, const char *trans, const char *diag, const int *n,
+                  const double *a, const int *lda, double *x, const int *incx);
+extern int dgemv_(const char *trans, const int *m, const int *n, const double *alpha,
+                  const double *a, const int *lda, const double *x, const int *incx,
+                  const double *beta, double *y, const int *incy);
 
-/* Forward declarations for local subroutines */
-int update_(integer *i, integer *n, doublereal *x, doublereal *h, integer *ldh, doublereal *y, doublereal *s, doublereal *v, integer *ldv);
-int basis_(integer *i, integer *n, doublereal *h, doublereal *v, integer *ldv, doublereal *w);
-
-/* Table of constant values */
-
-static integer c__1 = 1;
-static doublereal c_b7 = -1.;
-static doublereal c_b8 = 1.;
-static doublereal c_b20 = 0.;
+static void gmres_update(int iter, int n, double *x, double *h, int ldh,
+                         double *y, const double *s, double *v, int ldv);
+static void gmres_basis(int iter, int n, double *h_col, double *v, int ldv, double *w);
 
 /*  -- Iterative template routine --
 *     Univ. of Tennessee and Oak Ridge National Laboratory
@@ -137,302 +129,166 @@ static doublereal c_b20 = 0.;
 *  ============================================================
 */
 
-int PtVfmm(double *pot, double *sgm);
-int PtVmainDgnl(double *pot, double *sgm);
-int gmres_(integer *n, doublereal *b, doublereal *x, integer *restrt,
-           doublereal *work, integer *ldw, doublereal *h, integer *ldh,
-           integer *iter, doublereal *resid,
-           void (*matvec)(doublereal *, doublereal *, doublereal *, doublereal *),
-           void (*psolve)(doublereal *, doublereal *),
-           integer *info)
+int gmres(int n, double *b, double *x, int restrt, double *work, int ldw,
+          double *h, int ldh, int *iter, double *resid,
+          GmresMatVecFn matvec, GmresPrecondFn psolve, int *info)
 {
-    /* System generated locals */
-    integer work_dim1, work_offset, h_dim1, h_offset, i__1;
-    doublereal d__1;
+    const int inc = 1;
+    const double neg_one = -1.0;
+    const double one = 1.0;
+    const double zero = 0.0;
+    int i;
+    int k;
+    int maxit;
+    int r_col;
+    int s_col;
+    int w_col;
+    int y_col;
+    int av_col;
+    int v_col;
+    int cs_col;
+    int sn_col;
+    double aa;
+    double bb;
+    double bnrm2;
+    double rnorm;
+    double tol;
 
-    /* Local variables */
-    static doublereal bnrm2;
-    static integer i, k, r, s, v, w, y;
-    static integer maxit;
-    static doublereal rnorm, aa, bb;
-    static integer cs, av, sn;
-    static doublereal tol;
-
-    /* Parameter adjustments */
-    h_dim1 = *ldh;
-    h_offset = h_dim1 + 1;
-    h -= h_offset;
-    work_dim1 = *ldw;
-    work_offset = work_dim1 + 1;
-    work -= work_offset;
-    --x;
-    --b;
-
-    /* Executable Statements */
     *info = 0;
-
-/*     Test the input parameters. */
-
-    if (*n < 0) {
-	*info = -1;
-    } else if (*ldw < max(1,*n)) {
-	*info = -2;
+    if (n < 0) {
+        *info = -1;
+    } else if (ldw < n) {
+        *info = -2;
     } else if (*iter <= 0) {
-	*info = -3;
-    } else if (*ldh < *restrt + 1) {
-	*info = -4;
+        *info = -3;
+    } else if (ldh < restrt + 1) {
+        *info = -4;
     }
     if (*info != 0) {
-	return 0;
+        return 0;
     }
 
     maxit = *iter;
     tol = *resid;
 
-/*     Alias workspace columns. */
+    r_col = 0;
+    s_col = 1;
+    w_col = 2;
+    y_col = 2;
+    av_col = 2;
+    v_col = 3;
+    cs_col = restrt;
+    sn_col = restrt + 1;
 
-    r = 1;
-    s = r + 1;
-    w = s + 1;
-    y = w;
-    av = y;
-    v = av + 1;
-
-/*     Store the Givens parameters in matrix H. */
-
-    cs = *restrt + 1;
-    sn = cs + 1;
-
-/*     Set initial residual (AV is temporary workspace here). */
-
-    dcopy_(n, &b[1], &c__1, &work[av * work_dim1 + 1], &c__1);
-    if (dnrm2_(n, &x[1], &c__1) != 0.) {
-
-/*        AV is temporary workspace here. */
-
-	dcopy_(n, &b[1], &c__1, &work[av * work_dim1 + 1], &c__1);
-	(*matvec)(&c_b7, &x[1], &c_b8, &work[av * work_dim1 + 1]);
+    dcopy_(&n, b, &inc, &work[av_col * ldw], &inc);
+    if (dnrm2_(&n, x, &inc) != 0.0) {
+        dcopy_(&n, b, &inc, &work[av_col * ldw], &inc);
+        matvec((double *)&neg_one, x, (double *)&one, &work[av_col * ldw]);
     }
-    (*psolve)(&work[r * work_dim1 + 1], &work[av * work_dim1 + 1]);
-    bnrm2 = dnrm2_(n, &b[1], &c__1);
-    if (bnrm2 == 0.) {
-	bnrm2 = 1.;
+
+    psolve(&work[r_col * ldw], &work[av_col * ldw]);
+    bnrm2 = dnrm2_(&n, b, &inc);
+    if (bnrm2 == 0.0) {
+        bnrm2 = 1.0;
     }
-    if (dnrm2_(n, &work[r * work_dim1 + 1], &c__1) / bnrm2 < tol) {
-	goto L70;
+    if (dnrm2_(&n, &work[r_col * ldw], &inc) / bnrm2 < tol) {
+        return 0;
     }
 
     *iter = 0;
 
-L10:
+    for (;;) {
+        i = 0;
 
-    i = 0;
+        dcopy_(&n, &work[r_col * ldw], &inc, &work[v_col * ldw], &inc);
+        rnorm = dnrm2_(&n, &work[v_col * ldw], &inc);
+        aa = 1.0 / rnorm;
+        dscal_(&n, &aa, &work[v_col * ldw], &inc);
 
-/*        Construct the first column of V. */
+        work[s_col * ldw] = rnorm;
+        for (k = 1; k < n; ++k) {
+            work[s_col * ldw + k] = 0.0;
+        }
 
-    dcopy_(n, &work[r * work_dim1 + 1], &c__1, &work[v * work_dim1 + 1], &
-	    c__1);
-    rnorm = dnrm2_(n, &work[v * work_dim1 + 1], &c__1);
-    d__1 = 1. / rnorm;
-    dscal_(n, &d__1, &work[v * work_dim1 + 1], &c__1);
+        for (;;) {
+            ++i;
+            ++(*iter);
 
-/*        Initialize S to the elementary vector E1 scaled by RNORM. */
+            matvec((double *)&one, &work[(v_col + i - 1) * ldw], (double *)&zero,
+                   &work[av_col * ldw]);
+            psolve(&work[w_col * ldw], &work[av_col * ldw]);
 
-    work[s * work_dim1 + 1] = rnorm;
-    i__1 = *n;
-    for (k = 2; k <= i__1; ++k) {
-	work[k + s * work_dim1] = 0.;
-/* L20: */
+            gmres_basis(i, n, &h[(i - 1) * ldh], &work[v_col * ldw], ldw,
+                        &work[w_col * ldw]);
+
+            for (k = 0; k < i - 1; ++k) {
+                drot_(&inc, &h[(i - 1) * ldh + k], &inc, &h[(i - 1) * ldh + k + 1],
+                      &inc, &h[cs_col * ldh + k], &h[sn_col * ldh + k]);
+            }
+
+            aa = h[(i - 1) * ldh + (i - 1)];
+            bb = h[(i - 1) * ldh + i];
+            drotg_(&aa, &bb, &h[cs_col * ldh + (i - 1)], &h[sn_col * ldh + (i - 1)]);
+            drot_(&inc, &h[(i - 1) * ldh + (i - 1)], &inc, &h[(i - 1) * ldh + i],
+                  &inc, &h[cs_col * ldh + (i - 1)], &h[sn_col * ldh + (i - 1)]);
+
+            drot_(&inc, &work[s_col * ldw + (i - 1)], &inc, &work[s_col * ldw + i],
+                  &inc, &h[cs_col * ldh + (i - 1)], &h[sn_col * ldh + (i - 1)]);
+            *resid = fabs(work[s_col * ldw + i]) / bnrm2;
+
+            if (*resid <= tol) {
+                gmres_update(i, n, x, h, ldh, &work[y_col * ldw], &work[s_col * ldw],
+                             &work[v_col * ldw], ldw);
+                return 0;
+            }
+            if (*iter == maxit || i >= restrt) {
+                break;
+            }
+        }
+
+        gmres_update(restrt, n, x, h, ldh, &work[y_col * ldw], &work[s_col * ldw],
+                     &work[v_col * ldw], ldw);
+
+        dcopy_(&n, b, &inc, &work[av_col * ldw], &inc);
+        matvec((double *)&neg_one, x, (double *)&one, &work[av_col * ldw]);
+        psolve(&work[r_col * ldw], &work[av_col * ldw]);
+        work[s_col * ldw + i] = dnrm2_(&n, &work[r_col * ldw], &inc);
+        *resid = work[s_col * ldw + i] / bnrm2;
+        if (*resid <= tol) {
+            return 0;
+        }
+        if (*iter == maxit) {
+            *info = 1;
+            return 0;
+        }
     }
+}
 
-L30:
-
-    ++i;
-    ++(*iter);
-
-    (*matvec)(&c_b8, &work[(v + i - 1) * work_dim1 + 1], &c_b20, &work[av *
-	    work_dim1 + 1]);
-    (*psolve)(&work[w * work_dim1 + 1], &work[av * work_dim1 + 1]);
-
-/*           Construct I-th column of H orthnormal to the previous */
-/*           I-1 columns. */
-
-    basis_(&i, n, &h[i * h_dim1 + 1], &work[v * work_dim1 + 1], ldw, &work[w *
-	     work_dim1 + 1]);
-
-/*           Apply Givens rotations to the I-th column of H. This */
-/*           "updating" of the QR factorization effectively reduces */
-/*           the Hessenberg matrix to upper triangular form during */
-/*           the RESTRT iterations. */
-
-    i__1 = i - 1;
-    for (k = 1; k <= i__1; ++k) {
-	drot_(&c__1, &h[k + i * h_dim1], ldh, &h[k + 1 + i * h_dim1], ldh, &h[
-		k + cs * h_dim1], &h[k + sn * h_dim1]);
-/* L40: */
-    }
-
-/*           Construct the I-th rotation matrix, and apply it to H so that
- */
-/*           H(I+1,I) = 0. */
-
-    aa = h[i + i * h_dim1];
-    bb = h[i + 1 + i * h_dim1];
-    drotg_(&aa, &bb, &h[i + cs * h_dim1], &h[i + sn * h_dim1]);
-    drot_(&c__1, &h[i + i * h_dim1], ldh, &h[i + 1 + i * h_dim1], ldh, &h[i +
-	    cs * h_dim1], &h[i + sn * h_dim1]);
-
-/*           Apply the I-th rotation matrix to [ S(I), S(I+1) ]'. This */
-/*           gives an approximation of the residual norm. If less than */
-/*           tolerance, update the approximation vector X and quit. */
-
-    drot_(&c__1, &work[i + s * work_dim1], ldw, &work[i + 1 + s * work_dim1],
-	    ldw, &h[i + cs * h_dim1], &h[i + sn * h_dim1]);
-    *resid = (d__1 = work[i + 1 + s * work_dim1], abs(d__1)) / bnrm2;
-    //printf("iter # = %ld, err = %e\n", *iter, *resid);
-
-    //if (*iter%3 != 0) psolve = PtVfmm;
-    //else psolve = PtVmainDgnl;
-
-    if (*resid <= tol) {
-	update_(&i, n, &x[1], &h[h_offset], ldh, &work[y * work_dim1 + 1], &
-		work[s * work_dim1 + 1], &work[v * work_dim1 + 1], ldw);
-	goto L70;
-    }
-    if (*iter == maxit) {
-	goto L50;
-    }
-    if (i < *restrt) {
-	goto L30;
-    }
-
-L50:
-
-/*        Compute current solution vector X. */
-
-    update_(restrt, n, &x[1], &h[h_offset], ldh, &work[y * work_dim1 + 1], &
-	    work[s * work_dim1 + 1], &work[v * work_dim1 + 1], ldw);
-
-/*        Compute residual vector R, find norm, then check for tolerance.
-*/
-/*        (AV is temporary workspace here.) */
-
-    dcopy_(n, &b[1], &c__1, &work[av * work_dim1 + 1], &c__1);
-    (*matvec)(&c_b7, &x[1], &c_b8, &work[av * work_dim1 + 1]);
-    (*psolve)(&work[r * work_dim1 + 1], &work[av * work_dim1 + 1]);
-    work[i + 1 + s * work_dim1] = dnrm2_(n, &work[r * work_dim1 + 1], &c__1);
-    *resid = work[i + 1 + s * work_dim1] / bnrm2;
-    if (*resid <= tol) {
-	goto L70;
-    }
-    if (*iter == maxit) {
-	goto L60;
-    }
-
-/*        Restart. */
-
-    goto L10;
-
-L60:
-
-/*     Iteration fails. */
-
-    *info = 1;
-    return 0;
-
-L70:
-
-/*     Iteration successful; return. */
-
-    return 0;
-
-/*     End of GMRES */
-
-} /* gmres_ */
-
-
-/*     =============================================================== */
-/* Subroutine */ int update_(integer *i, integer *n, doublereal *x, doublereal *h,
-                            integer *ldh, doublereal *y, doublereal *s, doublereal *v,
-                            integer *ldv)
+static void gmres_update(int iter, int n, double *x, double *h, int ldh,
+                         double *y, const double *s, double *v, int ldv)
 {
-    /* System generated locals */
-    integer h_dim1, h_offset, v_dim1, v_offset;
+    const int inc = 1;
+    const double one = 1.0;
 
-    /* Local variables */
+    dcopy_(&iter, s, &inc, y, &inc);
+    dtrsv_("U", "N", "N", &iter, h, &ldh, y, &inc);
+    dgemv_("N", &n, &iter, &one, v, &ldv, y, &inc, &one, x, &inc);
+}
 
-
-
-/*     This routine updates the GMRES iterated solution approximation. */
-
-
-/*     .. Executable Statements .. */
-
-/*     Solve H*Y = S for upper triangualar H. */
-
-    /* Parameter adjustments */
-    v_dim1 = *ldv;
-    v_offset = v_dim1 + 1;
-    v -= v_offset;
-    --s;
-    --y;
-    h_dim1 = *ldh;
-    h_offset = h_dim1 + 1;
-    h -= h_offset;
-    --x;
-
-    /* Function Body */
-    dcopy_(i, &s[1], &c__1, &y[1], &c__1);
-    dtrsv_("UPPER", "NOTRANS", "NONUNIT", i, &h[h_offset], ldh, &y[1], &c__1,
-	    5L, 7L, 7L);
-
-/*     Compute current solution vector X = X + V*Y. */
-
-    dgemv_("NOTRANS", n, i, &c_b8, &v[v_offset], ldv, &y[1], &c__1, &c_b8, &x[
-	    1], &c__1, 7L);
-
-    return 0;
-
-} /* update_ */
-
-
-/*     ========================================================= */
-/* Subroutine */ int basis_(integer *i, integer *n, doublereal *h, doublereal *v,
-                           integer *ldv, doublereal *w)
+static void gmres_basis(int iter, int n, double *h_col, double *v, int ldv, double *w)
 {
-    /* System generated locals */
-    integer v_dim1, v_offset, i__1;
-    doublereal d__1;
+    const int inc = 1;
+    int k;
+    double scale;
 
-    /* Local variables */
-    static integer k;
-
-
-
-/*     Construct the I-th column of the upper Hessenberg matrix H */
-/*     using the Gram-Schmidt process on V and W. */
-
-
-    /* Parameter adjustments */
-    --w;
-    v_dim1 = *ldv;
-    v_offset = v_dim1 + 1;
-    v -= v_offset;
-    --h;
-
-    /* Function Body */
-    i__1 = *i;
-    for (k = 1; k <= i__1; ++k) {
-	h[k] = ddot_(n, &w[1], &c__1, &v[k * v_dim1 + 1], &c__1);
-	d__1 = -h[k];
-	daxpy_(n, &d__1, &v[k * v_dim1 + 1], &c__1, &w[1], &c__1);
-/* L10: */
+    for (k = 0; k < iter; ++k) {
+        h_col[k] = ddot_(&n, w, &inc, &v[k * ldv], &inc);
+        scale = -h_col[k];
+        daxpy_(&n, &scale, &v[k * ldv], &inc, w, &inc);
     }
-    h[*i + 1] = dnrm2_(n, &w[1], &c__1);
-    dcopy_(n, &w[1], &c__1, &v[(*i + 1) * v_dim1 + 1], &c__1);
-    d__1 = 1. / h[*i + 1];
-    dscal_(n, &d__1, &v[(*i + 1) * v_dim1 + 1], &c__1);
 
-    return 0;
-
+    h_col[iter] = dnrm2_(&n, w, &inc);
+    dcopy_(&n, w, &inc, &v[iter * ldv], &inc);
+    scale = 1.0 / h_col[iter];
+    dscal_(&n, &scale, &v[iter * ldv], &inc);
 }

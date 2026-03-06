@@ -7,13 +7,7 @@ This project depends on external numerical libraries and should be built against
 - BLAS
 - LAPACK
 
-## Optional library
-
-- `libf2c`
-
-`libf2c` is only needed on systems where the translated GMRES routine requires it at link time. The repository includes a compatibility header at [`include/f2c.h`](/Users/jiahuic/Garage/electrostatics/fmm_PB/include/f2c.h), but the runtime/library dependency should come from your package manager if needed.
-
-Important: `libf2c` is not a replacement for BLAS or LAPACK. The translated GMRES code in [`src/gmres.c`](/Users/jiahuic/Garage/electrostatics/fmm_PB/src/gmres.c) calls BLAS routines directly, so BLAS and LAPACK must be installed separately.
+The GMRES implementation is now native C and still uses BLAS/LAPACK for the underlying linear algebra kernels.
 
 ## macOS
 
@@ -30,36 +24,30 @@ brew install openblas lapack
 make BLAS_LIBS=-lopenblas LAPACK_LIBS=-llapack
 ```
 
-If `libf2c` is required on your machine, install it separately and pass:
-
-```sh
-make F2C_LIBS=-lf2c
-```
-
 ## Debian/Ubuntu
 
 ```sh
 sudo apt-get update
-sudo apt-get install build-essential libblas-dev liblapack-dev libf2c2-dev
+sudo apt-get install build-essential libblas-dev liblapack-dev
 ```
 
 Configure and build with:
 
 ```sh
-cmake -S . -B build -DFMM_PB_REQUIRE_F2C=ON
+cmake -S . -B build
 cmake --build build
 ```
 
 ## Fedora/RHEL
 
 ```sh
-sudo dnf install gcc blas-devel lapack-devel libf2c
+sudo dnf install gcc blas-devel lapack-devel
 ```
 
 Configure and build with:
 
 ```sh
-cmake -S . -B build -DFMM_PB_REQUIRE_F2C=ON
+cmake -S . -B build
 cmake --build build
 ```
 
